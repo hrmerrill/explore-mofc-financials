@@ -35,17 +35,40 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
-### Running the Extraction
+### Running the Extraction Pipeline
+
+The pipeline runs in two stages.
+
+**Stage 1 — Extract and validate (run once per new PDF set)**
 
 ```bash
-# Via the CLI entry point
-mofc-extract
-
-# Or directly
-python -m mofc_financials.data_extraction.extract_990
+mofc-pipeline
 ```
 
-This scans all `MOFC-990-*.pdf` files in `data/raw/`, extracts Part I Summary financial fields via OCR, and writes the results to `data/processed/mofc_990_financials.csv`.
+This scans all `MOFC-990-*.pdf` files in `data/raw/`, extracts Part I Summary
+fields and Parts VIII/IX line-item detail via OCR, writes three CSVs to
+`data/processed/`, and produces a validation report flagging values that may
+need correction.
+
+**Stage 2 — Manual correction and re-validation (iterate until clean)**
+
+```bash
+# Copy the extraction output to editable files (only needed once)
+cp data/processed/mofc_990_revenue_detail.csv \
+   data/processed/mofc_990_revenue_detail_manual_edits.csv
+cp data/processed/mofc_990_expense_detail.csv \
+   data/processed/mofc_990_expense_detail_manual_edits.csv
+
+# Open data/processed/mofc_990_validation_report.txt, fix values in the
+# *_manual_edits.csv files (compare against the source PDFs in data/raw/).
+
+# Re-validate the edited files — no OCR required
+mofc-validate
+```
+
+`mofc-validate` reads the `*_manual_edits.csv` files when present (falling back
+to the original extraction CSVs) and overwrites the validation report. Repeat
+until the report shows no errors.
 
 ## For Developers
 
@@ -57,14 +80,16 @@ explore-mofc-financials/
 ├── src/
 │   └── mofc_financials/        # Main package (src-layout)
 │       ├── __init__.py
-│       └── data_extraction
+│       └── data_extraction/
 │           ├── __init__.py
-│           └── extract_990.py  # OCR extraction from 990 PDFs
+│           ├── extract_990.py        # Part I Summary OCR extraction
+│           ├── extract_990_detail.py # Parts VIII/IX line-item extraction
+│           └── validate.py           # Pipeline orchestration + validation
 ├── tests/
-│   └── test_extract_990.py     # Unit tests
+│   └── test_*.py               # Unit tests (no OCR/PDF deps)
 ├── data/
 │   ├── raw/                    # Source PDFs (not committed)
-│   └── processed/              # Extracted CSVs
+│   └── processed/              # Extracted and manually edited CSVs
 └── .github/
     └── copilot-instructions.md # AI assistant conventions
 ```

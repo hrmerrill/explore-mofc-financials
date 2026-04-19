@@ -1,29 +1,44 @@
 """Cross-validate MOFC 990 extraction results and orchestrate the pipeline.
 
-This module provides a semi-automated extraction pipeline:
+This module provides a two-stage workflow:
 
-1. **Extract** — OCR-based extraction of summary + granular detail data
-2. **Write CSVs** — editable CSV files for manual correction
-3. **Validate** — cross-check detail totals against summary values
-4. **Report** — human-readable report flagging items for manual review
-
-The intended workflow is:
-
-- Run ``mofc-pipeline`` to extract and validate all years
-- Open the validation report to see flagged issues
-- Compare flagged items against the source PDFs in ``data/raw/``
-- Correct values directly in the CSV files
-
-Typical usage
--------------
-CLI::
+**Stage 1 — Extraction** (run once per new PDF set)::
 
     mofc-pipeline
 
-Programmatic::
+1. OCR-extract Part I Summary + Parts VIII/IX detail from each PDF
+2. Write ``mofc_990_financials.csv``, ``mofc_990_revenue_detail.csv``,
+   and ``mofc_990_expense_detail.csv`` to ``data/processed/``
+3. Run cross-validation and write ``mofc_990_validation_report.txt``
 
-    from mofc_financials.data_extraction.validate import run_pipeline
+**Stage 2 — Manual correction + re-validation** (iterate until clean)::
+
+    # 1. Copy extraction output to editable files (only needed once)
+    cp data/processed/mofc_990_revenue_detail.csv \\
+       data/processed/mofc_990_revenue_detail_manual_edits.csv
+    cp data/processed/mofc_990_expense_detail.csv \\
+       data/processed/mofc_990_expense_detail_manual_edits.csv
+
+    # 2. Open the report and fix values in the *_manual_edits.csv files
+    #    Compare against source PDFs in data/raw/ as needed.
+
+    # 3. Re-validate the edited files (no OCR required)
+    mofc-validate
+
+``mofc-validate`` reads ``*_manual_edits.csv`` when present, falling back
+to the original extraction CSVs, and overwrites the validation report.
+
+Programmatic usage
+------------------
+::
+
+    from mofc_financials.data_extraction.validate import run_pipeline, run_validation_only
+
+    # Full extraction + validation
     issues = run_pipeline(Path("data/raw"), Path("data/processed"))
+
+    # Validate manually edited CSVs only
+    issues = run_validation_only(Path("data/processed"))
 """
 
 from __future__ import annotations
@@ -34,15 +49,13 @@ import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import cast
 
 from mofc_financials.data_extraction.extract_990 import (
     FINANCIAL_FIELDS,
     extract_financials,
 )
 from mofc_financials.data_extraction.extract_990_detail import (
-    CONTRIBUTION_LINE_DEFS,
-    EXPENSE_LINE_DEFS,
-    REVENUE_LINE_DEFS,
     LineItemRow,
     extract_expense_detail,
     extract_revenue_detail,
@@ -238,6 +251,71 @@ def _write_csv(path: Path, fieldnames: list[str], rows: list[dict[str, str]]) ->
         writer.writerows(rows)
 
 
+def _read_summary_csv(path: Path) -> dict[str, dict[str, str]]:
+    """Read the summary CSV into a year-keyed dict.
+
+    Parameters
+    ----------
+    path : Path
+        Path to ``mofc_990_financials.csv``.
+
+    Returns
+    -------
+    dict[str, dict[str, str]]
+        Mapping of tax year to summary row dict.
+    """
+    by_year: dict[str, dict[str, str]] = {}
+    with open(path, newline="") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            year = row.get("form_year", "")
+            by_year[year] = dict(row)
+    return by_year
+
+
+def _read_detail_csv(
+    path: Path,
+    col_map: dict[str, str],
+) -> tuple[dict[str, list[LineItemRow]], dict[str, int]]:
+    """Read a detail CSV and return rows grouped by year.
+
+    Converts human-readable column names (e.g. ``total``, ``program_service``)
+    back to the internal ``col_a``/``col_b``/``col_c``/``col_d`` keys used by
+    the validation logic.
+
+    Parameters
+    ----------
+    path : Path
+        Path to a revenue or expense detail CSV.
+    col_map : dict[str, str]
+        Mapping from human-readable column name to internal key
+        (e.g. ``{"total": "col_a", "program_service": "col_b", ...}``).
+
+    Returns
+    -------
+    tuple[dict[str, list[LineItemRow]], dict[str, int]]
+        A pair of ``(rows_by_year, count_by_year)`` where *rows_by_year*
+        maps each tax year to its list of ``LineItemRow`` dicts, and
+        *count_by_year* maps each year to the number of rows.
+    """
+    by_year: dict[str, list[LineItemRow]] = {}
+    with open(path, newline="") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            year = row.get("form_year", "")
+            # Build as a plain dict to allow dynamic key assignment, then cast
+            # to LineItemRow (TypedDict keys must be literals for mypy).
+            item_dict: dict[str, str] = {
+                "line_number": row.get("line_number", ""),
+                "label": row.get("label", ""),
+            }
+            for human_col, col_key in col_map.items():
+                item_dict[col_key] = row.get(human_col, "")
+            by_year.setdefault(year, []).append(cast(LineItemRow, item_dict))
+    counts = {year: len(rows) for year, rows in by_year.items()}
+    return by_year, counts
+
+
 # ---------------------------------------------------------------------------
 # Validation logic
 # ---------------------------------------------------------------------------
@@ -253,6 +331,64 @@ _CONTRIBUTION_ADDITIVE_LINES = {"1a", "1b", "1c", "1d", "1e", "1f"}
 _CROSS_VALIDATION_TOLERANCE = 0.02  # 2 % for detail-vs-summary checks
 _SUBLINE_SUM_TOLERANCE = 0.05  # 5 % for subline sums (missing lines expected)
 _COLUMN_SUM_TOLERANCE = 0.02  # 2 % for col_b+c+d vs col_a
+
+# Sentinel key used in all_issues for cross-year findings
+_CROSS_YEAR_KEY = "cross-year"
+
+
+def check_label_consistency(
+    revenue_by_year: dict[str, list[LineItemRow]],
+    expenses_by_year: dict[str, list[LineItemRow]],
+) -> list[ValidationIssue]:
+    """Warn when the same line number has different labels across tax years.
+
+    Parameters
+    ----------
+    revenue_by_year : dict[str, list[LineItemRow]]
+        Revenue detail rows grouped by tax year.
+    expenses_by_year : dict[str, list[LineItemRow]]
+        Expense detail rows grouped by tax year.
+
+    Returns
+    -------
+    list[ValidationIssue]
+        One warning per line number whose label varies across years, for
+        each section (revenue and expenses).  All issues use the sentinel
+        year ``"cross-year"``.
+    """
+    issues: list[ValidationIssue] = []
+
+    for section_name, by_year in [
+        ("revenue", revenue_by_year),
+        ("expense", expenses_by_year),
+    ]:
+        # Map line_number -> {label -> sorted list of years that use it}
+        label_map: dict[str, dict[str, list[str]]] = {}
+        for year, rows in sorted(by_year.items()):
+            for row in rows:
+                ln = row.get("line_number", "")
+                label = row.get("label", "").strip()
+                if not ln or not label:
+                    continue
+                label_map.setdefault(ln, {}).setdefault(label, []).append(year)
+
+        for ln, labels_to_years in sorted(label_map.items(), key=lambda x: (len(x[0]), x[0])):
+            if len(labels_to_years) > 1:
+                detail = "; ".join(
+                    f"{', '.join(years)}: {label!r}"
+                    for label, years in sorted(labels_to_years.items())
+                )
+                issues.append(
+                    ValidationIssue(
+                        _CROSS_YEAR_KEY,
+                        "WARNING",
+                        "label_consistency",
+                        f"{section_name.capitalize()} line {ln} has inconsistent labels "
+                        f"across years — {detail}",
+                    )
+                )
+
+    return issues
 
 
 def validate_year(
@@ -335,27 +471,6 @@ def _check_completeness(
                     "ERROR",
                     "completeness",
                     f"Line {ln} ({label}) found but total column is empty",
-                )
-            )
-
-    # Missing expected line items
-    for section_name, defs, rows in [
-        ("expense", EXPENSE_LINE_DEFS, expenses),
-        ("revenue", REVENUE_LINE_DEFS, revenue),
-        ("contribution", CONTRIBUTION_LINE_DEFS, revenue),
-    ]:
-        expected_lns = {ln for ln, _, _ in defs}
-        found_lns = {r.get("line_number", "") for r in rows}
-        missing = expected_lns - found_lns
-        if missing:
-            missing_sorted = sorted(missing, key=lambda x: (len(x), x))
-            issues.append(
-                ValidationIssue(
-                    year,
-                    "WARNING",
-                    "completeness",
-                    f"{len(missing)} expected {section_name} line(s) not found: "
-                    f"{', '.join(missing_sorted)}",
                 )
             )
 
@@ -450,12 +565,20 @@ def _check_internal_consistency(
                     )
                 )
 
-    # Expense sublines sum ≈ line 25
+    # Expense sublines sum ≈ line 25 for all four columns
     if exp_total:
-        expected = _to_int(exp_total.get("col_a", ""))
-        if expected:
+        col_labels = {
+            "col_a": "total",
+            "col_b": "program_service",
+            "col_c": "management_and_general",
+            "col_d": "fundraising",
+        }
+        for col_key, col_label in col_labels.items():
+            expected = _to_int(str(exp_total.get(col_key, "")))
+            if not expected:
+                continue
             component_sum = sum(
-                _to_int(r.get("col_a", "")) or 0
+                _to_int(str(r.get(col_key, ""))) or 0
                 for r in expenses
                 if r.get("line_number") not in ("25", "26")
             )
@@ -466,7 +589,8 @@ def _check_internal_consistency(
                         year,
                         "WARNING",
                         "internal_consistency",
-                        f"Expense sublines sum={component_sum:,} vs line 25={expected:,} "
+                        f"Expense sublines {col_label} sum={component_sum:,} vs "
+                        f"line 25 {col_label}={expected:,} "
                         f"({diff:.1%} — likely missing lines)",
                     )
                 )
@@ -514,6 +638,52 @@ def _check_internal_consistency(
                         f"({diff:.1%} — likely missing lines)",
                     )
                 )
+
+    # Per-row: col_b + col_c + col_d ≈ col_a for every expense row with all columns present
+    for row in expenses:
+        col_a = _to_int(row.get("col_a", ""))
+        col_b = _to_int(row.get("col_b", "")) or 0
+        col_c = _to_int(row.get("col_c", "")) or 0
+        col_d = _to_int(row.get("col_d", "")) or 0
+        if col_a is None or not any([col_b, col_c, col_d]):
+            continue
+        col_sum = col_b + col_c + col_d
+        diff = _pct_diff(col_sum, col_a)
+        if diff > _COLUMN_SUM_TOLERANCE:
+            ln = row.get("line_number", "?")
+            label = row.get("label", "")
+            issues.append(
+                ValidationIssue(
+                    year,
+                    "WARNING",
+                    "internal_consistency",
+                    f"Expense line {ln} ({label}): col_b+c+d={col_sum:,} vs total={col_a:,} "
+                    f"({diff:.1%} difference)",
+                )
+            )
+
+    # Per-row: col_b + col_c + col_d ≈ col_a for every revenue row with all columns present
+    for row in revenue:
+        col_a = _to_int(row.get("col_a", ""))
+        col_b = _to_int(row.get("col_b", "")) or 0
+        col_c = _to_int(row.get("col_c", "")) or 0
+        col_d = _to_int(row.get("col_d", "")) or 0
+        if col_a is None or not any([col_b, col_c, col_d]):
+            continue
+        col_sum = col_b + col_c + col_d
+        diff = _pct_diff(col_sum, col_a)
+        if diff > _COLUMN_SUM_TOLERANCE:
+            ln = row.get("line_number", "?")
+            label = row.get("label", "")
+            issues.append(
+                ValidationIssue(
+                    year,
+                    "WARNING",
+                    "internal_consistency",
+                    f"Revenue line {ln} ({label}): col_b+c+d={col_sum:,} vs total={col_a:,} "
+                    f"({diff:.1%} difference)",
+                )
+            )
 
 
 def _check_duplicates(
@@ -638,7 +808,9 @@ def format_report(
     total_errors = 0
     total_warnings = 0
 
-    for year in sorted(all_issues.keys()):
+    year_keys = sorted(k for k in all_issues if k != _CROSS_YEAR_KEY)
+
+    for year in year_keys:
         year_issues = all_issues[year]
         errors = [i for i in year_issues if i.severity == "ERROR"]
         warnings = [i for i in year_issues if i.severity == "WARNING"]
@@ -668,12 +840,22 @@ def format_report(
 
         lines.append("")
 
+    # Cross-year section
+    cross_year = all_issues.get(_CROSS_YEAR_KEY, [])
+    if cross_year:
+        total_warnings += len(cross_year)
+        lines.append("--- cross-year ---")
+        lines.append("WARNINGS (label inconsistencies across tax years):")
+        for w in cross_year:
+            lines.append(f"  ⚠ [{w.category.upper()}] {w.message}")
+        lines.append("")
+
     # Summary table
     lines.append("=" * 56)
     lines.append("SUMMARY")
     lines.append(f"{'Year':<6} {'Errors':>7} {'Warnings':>9} {'Revenue':>9} {'Expense':>9}")
     lines.append("-" * 44)
-    for year in sorted(all_issues.keys()):
+    for year in year_keys:
         year_issues = all_issues[year]
         n_err = sum(1 for i in year_issues if i.severity == "ERROR")
         n_warn = sum(1 for i in year_issues if i.severity == "WARNING")
@@ -681,9 +863,10 @@ def format_report(
         x = expense_counts.get(year, 0)
         lines.append(f"{year:<6} {n_err:>7} {n_warn:>9} {r:>9} {x:>9}")
     lines.append("-" * 44)
+    n_cross = len(cross_year)
     lines.append(
         f"Total: {total_errors} errors, {total_warnings} warnings "
-        f"across {len(all_issues)} years"
+        f"across {len(year_keys)} years" + (f" ({n_cross} cross-year)" if n_cross else "")
     )
 
     return "\n".join(lines)
@@ -734,6 +917,8 @@ def run_pipeline(
     all_issues: dict[str, list[ValidationIssue]] = {}
     revenue_counts: dict[str, int] = {}
     expense_counts: dict[str, int] = {}
+    revenue_by_year: dict[str, list[LineItemRow]] = {}
+    expenses_by_year: dict[str, list[LineItemRow]] = {}
 
     for pdf in pdfs:
         year_match = re.search(r"(\d{4})", pdf.stem)
@@ -748,6 +933,8 @@ def run_pipeline(
         revenue = extract_revenue_detail(str(pdf))
         expenses = extract_expense_detail(str(pdf))
 
+        revenue_by_year[year] = revenue
+        expenses_by_year[year] = expenses
         revenue_counts[year] = len(revenue)
         expense_counts[year] = len(expenses)
 
@@ -757,6 +944,9 @@ def run_pipeline(
 
         # Step 3: Validate
         all_issues[year] = validate_year(year, summary, revenue, expenses)
+
+    # Step 4: Cross-year label consistency
+    all_issues[_CROSS_YEAR_KEY] = check_label_consistency(revenue_by_year, expenses_by_year)
 
     # Write CSVs
     summary_path = output_dir / "mofc_990_financials.csv"
@@ -789,6 +979,87 @@ def run_pipeline(
     return all_issues
 
 
+def run_validation_only(output_dir: Path) -> dict[str, list[ValidationIssue]]:
+    """Validate manually edited CSV files without re-running OCR extraction.
+
+    Reads ``*_manual_edits.csv`` detail files from *output_dir* when present,
+    falling back to the plain extraction CSVs.  Cross-validates against the
+    summary CSV (``mofc_990_financials.csv``) and overwrites the validation
+    report.
+
+    Parameters
+    ----------
+    output_dir : Path
+        Directory containing the processed CSV files written by
+        :func:`run_pipeline`.
+
+    Returns
+    -------
+    dict[str, list[ValidationIssue]]
+        Validation issues keyed by tax year.
+
+    Raises
+    ------
+    SystemExit
+        If the summary CSV or any required detail CSV is not found.
+    """
+    summary_path = output_dir / "mofc_990_financials.csv"
+    if not summary_path.exists():
+        print(f"Summary CSV not found: {summary_path}", file=sys.stderr)
+        sys.exit(1)
+
+    # Prefer *_manual_edits.csv, fall back to original extraction CSV
+    rev_path = output_dir / "mofc_990_revenue_detail_manual_edits.csv"
+    if not rev_path.exists():
+        rev_path = output_dir / "mofc_990_revenue_detail.csv"
+
+    exp_path = output_dir / "mofc_990_expense_detail_manual_edits.csv"
+    if not exp_path.exists():
+        exp_path = output_dir / "mofc_990_expense_detail.csv"
+
+    for p in (rev_path, exp_path):
+        if not p.exists():
+            print(f"Detail CSV not found: {p}", file=sys.stderr)
+            sys.exit(1)
+
+    print(f"Validating {rev_path.name} and {exp_path.name}...", file=sys.stderr)
+
+    summary_by_year = _read_summary_csv(summary_path)
+
+    # Reverse the col maps so human-readable names → col_a/col_b/...
+    rev_col_map = {v: k for k, v in _COL_TO_REVENUE.items()}
+    exp_col_map = {v: k for k, v in _COL_TO_EXPENSE.items()}
+
+    revenue_by_year, revenue_counts = _read_detail_csv(rev_path, rev_col_map)
+    expenses_by_year, expense_counts = _read_detail_csv(exp_path, exp_col_map)
+
+    all_years = sorted(set(summary_by_year) | set(revenue_by_year) | set(expenses_by_year))
+    all_issues: dict[str, list[ValidationIssue]] = {}
+
+    for year in all_years:
+        summary = summary_by_year.get(year, {})
+        revenue = revenue_by_year.get(year, [])
+        expenses = expenses_by_year.get(year, [])
+        all_issues[year] = validate_year(year, summary, revenue, expenses)
+
+    # Cross-year label consistency
+    all_issues[_CROSS_YEAR_KEY] = check_label_consistency(revenue_by_year, expenses_by_year)
+
+    output_files = [str(rev_path), str(exp_path)]
+    report = format_report(all_issues, revenue_counts, expense_counts, output_files)
+    report_path = output_dir / "mofc_990_validation_report.txt"
+    report_path.write_text(report)
+
+    total_e = sum(len([i for i in v if i.severity == "ERROR"]) for v in all_issues.values())
+    total_w = sum(len([i for i in v if i.severity == "WARNING"]) for v in all_issues.values())
+    print(f"Wrote validation report to {report_path}", file=sys.stderr)
+    print(f"  \u2192 {total_e} errors, {total_w} warnings", file=sys.stderr)
+
+    print(report)
+
+    return all_issues
+
+
 def main() -> None:
     """Run the full MOFC 990 extraction pipeline with validation.
 
@@ -799,6 +1070,17 @@ def main() -> None:
     data_dir = Path(__file__).resolve().parent.parent.parent.parent / "data" / "raw"
     output_dir = data_dir.parent / "processed"
     run_pipeline(data_dir, output_dir)
+
+
+def validate_main() -> None:
+    """Re-validate manually edited CSVs without re-running OCR extraction.
+
+    Reads ``*_manual_edits.csv`` files from ``data/processed/``, falling back
+    to the original extraction CSVs when edited versions are absent.  Writes
+    an updated ``mofc_990_validation_report.txt``.
+    """
+    output_dir = Path(__file__).resolve().parent.parent.parent.parent / "data" / "processed"
+    run_validation_only(output_dir)
 
 
 if __name__ == "__main__":
