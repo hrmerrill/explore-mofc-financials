@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MOFC Financial Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #f1f5f9;
+      --card: #ffffff;
+      --header-bg: #0f172a;
+      --header-fg: #f8fafc;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --accent: #2563eb;
+      --success: #059669;
+      --danger: #dc2626;
+      --radius: 10px;
+      --shadow: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.06);
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    header {
+      background: var(--header-bg);
+      color: var(--header-fg);
+      padding: 1.5rem 2rem;
+      text-align: center;
+    }
+    header h1 { font-size: 1.6rem; font-weight: 700; margin-bottom: .25rem; }
+    header p { font-size: .85rem; color: #94a3b8; }
+
+    /* ── Tabs ── */
+    .tabs {
+      display: flex;
+      justify-content: center;
+      gap: .25rem;
+      background: var(--header-bg);
+      padding: 0 2rem .75rem;
+    }
+    .tab-btn {
+      padding: .5rem 1.5rem;
+      border: none;
+      border-radius: var(--radius) var(--radius) 0 0;
+      background: transparent;
+      color: #94a3b8;
+      font-size: .9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .15s, color .15s;
+    }
+    .tab-btn:hover { color: var(--header-fg); }
+    .tab-btn.active { background: var(--bg); color: var(--text); }
+
+    /* ── Main ── */
+    main { max-width: 1280px; margin: 0 auto; padding: 1.5rem; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* ── KPI Cards ── */
+    .kpi-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .kpi-card {
+      background: var(--card);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 1.25rem;
+    }
+    .kpi-label { display: block; font-size: .75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; font-weight: 600; }
+    .kpi-value { display: block; font-size: 1.5rem; font-weight: 700; margin-top: .25rem; }
+    .kpi-sub { display: block; font-size: .75rem; color: var(--text-muted); margin-top: .25rem; }
+    .kpi-value.positive { color: var(--success); }
+    .kpi-value.negative { color: var(--danger); }
+
+    /* ── Chart Cards ── */
+    .chart-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1.25rem;
+      margin-bottom: 1.5rem;
+    }
+    .chart-card {
+      background: var(--card);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 1.25rem;
+      min-height: 340px;
+    }
+    .chart-card.full-width { grid-column: 1 / -1; }
+    .chart-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: .5rem;
+      margin-bottom: .75rem;
+    }
+    .chart-header h3 { font-size: .95rem; font-weight: 600; }
+
+    /* ── Toggle Buttons ── */
+    .toggle-group {
+      display: inline-flex;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .toggle-btn {
+      padding: .3rem .75rem;
+      border: none;
+      background: transparent;
+      font-size: .75rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: background .15s, color .15s;
+    }
+    .toggle-btn:not(:last-child) { border-right: 1px solid var(--border); }
+    .toggle-btn.active { background: var(--accent); color: #fff; }
+
+    /* ── Section notes ── */
+    .section-note {
+      font-size: .8rem;
+      color: var(--text-muted);
+      margin-bottom: 1rem;
+      font-style: italic;
+    }
+
+    /* ── Noncash Toggle Switch ── */
+    .switch-group { display: inline-flex; align-items: center; gap: .4rem; font-size: .75rem; color: var(--text-muted); font-weight: 500; }
+    .switch-group input[type="checkbox"] { display: none; }
+    .switch-track {
+      width: 32px; height: 18px;
+      background: var(--border);
+      border-radius: 9px;
+      position: relative;
+      cursor: pointer;
+      transition: background .2s;
+    }
+    .switch-track::after {
+      content: '';
+      width: 14px; height: 14px;
+      background: #fff;
+      border-radius: 50%;
+      position: absolute;
+      top: 2px; left: 2px;
+      transition: transform .2s;
+    }
+    .switch-group input:checked + .switch-track { background: var(--accent); }
+    .switch-group input:checked + .switch-track::after { transform: translateX(14px); }
+    .chart-controls { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+
+    /* ── Footer ── */
+    footer {
+      text-align: center;
+      padding: 1.5rem;
+      font-size: .8rem;
+      color: var(--text-muted);
+    }
+    footer a { color: var(--accent); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+
+    /* ── Responsive ── */
+    @media (max-width: 768px) {
+      .chart-grid { grid-template-columns: 1fr; }
+      .kpi-row { grid-template-columns: repeat(2, 1fr); }
+      header h1 { font-size: 1.25rem; }
+      main { padding: 1rem; }
+    }
+    @media (max-width: 480px) {
+      .kpi-row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>MOFC Financial Dashboard</h1>
+  <p>Mid-Ohio Food Collective · IRS Form 990 Data · 2019–2023</p>
+</header>
+
+<nav class="tabs">
+  <button class="tab-btn active" data-tab="overall">Overall</button>
+  <button class="tab-btn" data-tab="revenue">Revenue</button>
+  <button class="tab-btn" data-tab="expenses">Expenses</button>
+</nav>
+
+<main>
+
+  <!-- ═══════════════ OVERALL ═══════════════ -->
+  <section id="overall" class="tab-content active">
+    <div class="kpi-row" id="kpi-overall"></div>
+    <div class="chart-grid">
+      <div class="chart-card">
+        <div class="chart-header"><h3>Revenue vs. Expenses</h3></div>
+        <canvas id="chart-rev-exp"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header"><h3>Surplus / Deficit</h3></div>
+        <canvas id="chart-net-income"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header">
+          <h3>Revenue Composition</h3>
+          <div class="toggle-group">
+            <button class="toggle-btn active" data-chart="chart-rev-comp" data-mode="grouped">Grouped</button>
+            <button class="toggle-btn" data-chart="chart-rev-comp" data-mode="stacked">Stacked</button>
+          </div>
+        </div>
+        <canvas id="chart-rev-comp"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header">
+          <h3>Expense Composition</h3>
+          <div class="toggle-group">
+            <button class="toggle-btn active" data-chart="chart-exp-comp" data-mode="grouped">Grouped</button>
+            <button class="toggle-btn" data-chart="chart-exp-comp" data-mode="stacked">Stacked</button>
+          </div>
+        </div>
+        <canvas id="chart-exp-comp"></canvas>
+      </div>
+      <div class="chart-card full-width">
+        <div class="chart-header">
+          <h3>Functional Expense Allocation</h3>
+          <div class="toggle-group">
+            <button class="toggle-btn" data-chart="chart-functional" data-mode="grouped">Grouped</button>
+            <button class="toggle-btn active" data-chart="chart-functional" data-mode="stacked">Stacked</button>
+          </div>
+        </div>
+        <canvas id="chart-functional"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════ REVENUE ═══════════════ -->
+  <section id="revenue" class="tab-content">
+    <p class="section-note">Noncash (food) contributions excluded. See Overall tab for full revenue picture.</p>
+    <div class="kpi-row" id="kpi-revenue"></div>
+    <div class="chart-grid">
+      <div class="chart-card full-width">
+        <div class="chart-header">
+          <h3>Cash Revenue by Category</h3>
+          <div class="chart-controls">
+            <label class="switch-group">
+              <input type="checkbox" id="noncash-toggle">
+              <span class="switch-track"></span>
+              Show Noncash (Food)
+            </label>
+            <div class="toggle-group">
+              <button class="toggle-btn active" data-chart="chart-rev-detail" data-mode="grouped">Grouped</button>
+              <button class="toggle-btn" data-chart="chart-rev-detail" data-mode="stacked">Stacked</button>
+            </div>
+          </div>
+        </div>
+        <canvas id="chart-rev-detail"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════ EXPENSES ═══════════════ -->
+  <section id="expenses" class="tab-content">
+    <p class="section-note">Salaries &amp; benefits and food distribution costs excluded. See Overall tab for full expense picture.</p>
+    <div class="kpi-row" id="kpi-expenses"></div>
+    <div class="chart-grid">
+      <div class="chart-card full-width">
+        <div class="chart-header">
+          <h3>Operating Expenses by Category</h3>
+          <div class="toggle-group">
+            <button class="toggle-btn active" data-chart="chart-exp-detail" data-mode="grouped">Grouped</button>
+            <button class="toggle-btn" data-chart="chart-exp-detail" data-mode="stacked">Stacked</button>
+          </div>
+        </div>
+        <canvas id="chart-exp-detail"></canvas>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  Data extracted from IRS Form 990 filings via OCR with manual corrections.
+  Source PDFs: <a href="https://mofc.org/financials/" target="_blank" rel="noopener">mofc.org/financials</a>
+</footer>
+
+<script>
+/* ════════════════════════════════════════════════════════════════
+   DATA
+   ════════════════════════════════════════════════════════════════ */
+const YEARS = [2019, 2020, 2021, 2022, 2023];
+
+const SUMMARY = {
+  totalRevenue:     [124406705, 150715504, 115170580, 121763988, 133634324],
+  totalExpenses:    [115824878, 123732505, 118899557, 124787958, 134475329],
+  netIncome:        [8581827, 26982999, -3728977, -3023970, -841005],
+  salaries:         [10747872, 14401579, 14467535, 14941672, 15863890],
+  totalAssets:      [40992168, 66739553, 66822693, 64158489, 61859448],
+  totalLiabilities: [3434922, 2199308, 6011425, 6371191, 4913155],
+  netAssets:        [37557246, 64540245, 60811268, 57787298, 56946293],
+  noncash:          [91962060, 87075393, 83015952, 85157621, 99879112],
+  food:             [97809886, 98975790, 94074670, 98804335, 107214002],
+};
+SUMMARY.cashRevenue = SUMMARY.totalRevenue.map((r, i) => r - SUMMARY.noncash[i]);
+SUMMARY.otherExpenses = SUMMARY.totalExpenses.map((e, i) => e - SUMMARY.food[i] - SUMMARY.salaries[i]);
+
+const FUNCTIONAL = {
+  program:    [108617597, 114982997, 109038870, 115034064, 124038575],
+  management: [5027883, 5627572, 6413813, 6362388, 6846503],
+  fundraising:[2179398, 3121936, 3446874, 3391506, 3590251],
+};
+
+/* Revenue line items (excluding noncash 1g and subtotals) */
+const REVENUE_CATS = {
+  'Cash Contributions':     [24024052, 48108246, 25063082, 23791663, 20550573],
+  'Government Grants':      [4472152, 11524742, 6060559, 6675034, 6221821],
+  'Shared Maint. Fees':     [2518729, 1100245, 2243697, 3699382, 3466879],
+  'Investment Income':      [165887, 1527379, -2272381, 1381386, 2263725],
+  'Program Earned Income':  [660417, 680835, 812534, 850916, 896062],
+  'Rental & Other Income':  [603408, 698664, 247137, 128659, 268310],
+  'Fundraising Events':     [0, 0, 0, 79327, 87842],
+};
+
+/* Expense line items (excluding salary lines 5/7/8/9/10, food 24a, total 25)
+   Normalized by label across years (lines 24b-d swap labels).
+   Grouped into logical categories for readability. */
+const EXPENSE_CATS = {
+  'Facilities & Infrastructure': [2392705, 2501177, 2458417, 2946391, 3578558],
+  'Professional Services':       [1719801, 4229473, 4115175, 3561913, 2718955],
+  'Program Operations':          [1581640, 1734831, 1907957, 2426630, 2770945],
+  'Administrative':              [854553, 1204530, 1116949, 1114135, 1530941],
+  'Marketing & Fundraising':     [302164, 315278, 744704, 802743, 277028],
+  'Other':                       [416257, 369837, 14150, 190139, 521010],
+};
+/* Breakdown within each group (for tooltips) */
+const EXPENSE_GROUP_DETAIL = {
+  'Facilities & Infrastructure': 'Occupancy + Depreciation + Insurance',
+  'Professional Services':       'Prof. Fundraising + Other Fees + Accounting + Legal',
+  'Program Operations':          'Service Delivery + Transportation',
+  'Administrative':              'Office + IT + Travel + Conferences',
+  'Marketing & Fundraising':     'Advertising + Fundraising Expense',
+  'Other':                       'All other expenses',
+};
+
+/* ════════════════════════════════════════════════════════════════
+   UTILITIES
+   ════════════════════════════════════════════════════════════════ */
+const fmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+
+function abbrev(v) {
+  const abs = Math.abs(v);
+  if (abs >= 1e6) return (v < 0 ? '-' : '') + '$' + (abs / 1e6).toFixed(1) + 'M';
+  if (abs >= 1e3) return (v < 0 ? '-' : '') + '$' + (abs / 1e3).toFixed(0) + 'K';
+  return '$' + v;
+}
+
+function pctChange(curr, prev) {
+  if (prev === 0) return 'N/A';
+  const pct = ((curr - prev) / Math.abs(prev) * 100).toFixed(1);
+  return (pct >= 0 ? '+' : '') + pct + '% YoY';
+}
+
+function renderKpi(containerId, cards) {
+  const el = document.getElementById(containerId);
+  el.innerHTML = cards.map(c => `
+    <div class="kpi-card">
+      <span class="kpi-label">${c.label}</span>
+      <span class="kpi-value ${c.cls || ''}">${c.value}</span>
+      ${c.sub ? `<span class="kpi-sub">${c.sub}</span>` : ''}
+    </div>
+  `).join('');
+}
+
+/* ════════════════════════════════════════════════════════════════
+   CHART REGISTRY & TOGGLE
+   ════════════════════════════════════════════════════════════════ */
+const charts = {};
+
+function setStacked(chartId, stacked) {
+  const c = charts[chartId];
+  if (!c) return;
+  c.options.scales.x.stacked = stacked;
+  c.options.scales.y.stacked = stacked;
+  c.update();
+}
+
+/* Default chart options */
+function baseOpts(extra = {}) {
+  return {
+    responsive: true,
+    maintainAspectRatio: true,
+    aspectRatio: 1.7,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { position: 'top', labels: { boxWidth: 12, padding: 10, font: { size: 11 } } },
+      tooltip: {
+        callbacks: {
+          label: ctx => {
+            const v = ctx.parsed.y;
+            if (v == null) return '';
+            return `${ctx.dataset.label}: ${fmt.format(v)}`;
+          }
+        }
+      },
+    },
+    scales: {
+      x: { stacked: false, grid: { display: false } },
+      y: {
+        stacked: false,
+        ticks: { callback: v => abbrev(v) },
+        grid: { color: '#f1f5f9' },
+      },
+    },
+    ...extra,
+  };
+}
+
+function makeDatasets(catObj, colors) {
+  const keys = Object.keys(catObj);
+  return keys.map((k, i) => ({
+    label: k,
+    data: catObj[k],
+    backgroundColor: colors[i % colors.length],
+    borderRadius: 3,
+  }));
+}
+
+/* ════════════════════════════════════════════════════════════════
+   COLOR PALETTES
+   ════════════════════════════════════════════════════════════════ */
+const REVENUE_COLORS = ['#1e40af','#2563eb','#0891b2','#059669','#16a34a','#65a30d','#ca8a04'];
+const EXPENSE_COLORS = ['#dc2626','#ea580c','#16a34a','#2563eb','#a855f7','#9ca3af'];
+
+/* ════════════════════════════════════════════════════════════════
+   KPI CARDS
+   ════════════════════════════════════════════════════════════════ */
+const li = YEARS.length - 1; // latest index
+
+renderKpi('kpi-overall', [
+  { label: '2023 Total Revenue', value: abbrev(SUMMARY.totalRevenue[li]),
+    sub: pctChange(SUMMARY.totalRevenue[li], SUMMARY.totalRevenue[li-1]) },
+  { label: '2023 Total Expenses', value: abbrev(SUMMARY.totalExpenses[li]),
+    sub: pctChange(SUMMARY.totalExpenses[li], SUMMARY.totalExpenses[li-1]) },
+  { label: '2023 Net Income', value: abbrev(SUMMARY.netIncome[li]),
+    cls: SUMMARY.netIncome[li] >= 0 ? 'positive' : 'negative' },
+  { label: '2023 Net Assets', value: abbrev(SUMMARY.netAssets[li]),
+    sub: pctChange(SUMMARY.netAssets[li], SUMMARY.netAssets[li-1]) },
+]);
+
+const cashRevLatest = SUMMARY.cashRevenue[li];
+renderKpi('kpi-revenue', [
+  { label: '2023 Cash Revenue', value: abbrev(cashRevLatest),
+    sub: pctChange(cashRevLatest, SUMMARY.cashRevenue[li-1]) },
+  { label: 'Largest Source', value: 'Cash Contributions',
+    sub: abbrev(REVENUE_CATS['Cash Contributions'][li]) },
+  { label: '5-Year Avg Cash Rev.', value: abbrev(
+      SUMMARY.cashRevenue.reduce((a,b)=>a+b,0) / YEARS.length) },
+]);
+
+const opexLatest = SUMMARY.otherExpenses[li];
+renderKpi('kpi-expenses', [
+  { label: '2023 Operating Expenses', value: abbrev(opexLatest),
+    sub: 'Excl. salaries & food' },
+  { label: 'Largest Category', value: 'Facilities',
+    sub: abbrev(EXPENSE_CATS['Facilities & Infrastructure'][li]) },
+  { label: '5-Year Avg Operating', value: abbrev(
+      SUMMARY.otherExpenses.reduce((a,b)=>a+b,0) / YEARS.length) },
+]);
+
+/* ════════════════════════════════════════════════════════════════
+   CHART: Revenue vs. Expenses (Overall)
+   ════════════════════════════════════════════════════════════════ */
+charts['chart-rev-exp'] = new Chart(document.getElementById('chart-rev-exp'), {
+  type: 'bar',
+  data: {
+    labels: YEARS.map(String),
+    datasets: [
+      { label: 'Total Revenue',  data: SUMMARY.totalRevenue,  backgroundColor: '#2563eb', borderRadius: 3 },
+      { label: 'Total Expenses', data: SUMMARY.totalExpenses, backgroundColor: '#f97316', borderRadius: 3 },
+    ],
+  },
+  options: baseOpts(),
+});
+
+/* ════════════════════════════════════════════════════════════════
+   CHART: Surplus / Deficit (Overall)
+   ════════════════════════════════════════════════════════════════ */
+charts['chart-net-income'] = new Chart(document.getElementById('chart-net-income'), {
+  type: 'bar',
+  data: {
+    labels: YEARS.map(String),
+    datasets: [{
+      label: 'Net Income',
+      data: SUMMARY.netIncome,
+      backgroundColor: SUMMARY.netIncome.map(v => v >= 0 ? '#059669' : '#dc2626'),
+      borderRadius: 3,
+    }],
+  },
+  options: baseOpts({
+    plugins: {
+      legend: { display: false },
+      tooltip: { callbacks: { label: ctx => `Net Income: ${fmt.format(ctx.parsed.y)}` } },
+    },
+  }),
+});
+
+/* ════════════════════════════════════════════════════════════════
+   CHART: Revenue Composition (Overall)
+   ════════════════════════════════════════════════════════════════ */
+charts['chart-rev-comp'] = new Chart(document.getElementById('chart-rev-comp'), {
+  type: 'bar',
+  data: {
+    labels: YEARS.map(String),
+    datasets: [
+      { label: 'Cash Revenue',             data: SUMMARY.cashRevenue, backgroundColor: '#2563eb', borderRadius: 3 },
+      { label: 'Noncash (Food) Donations',  data: SUMMARY.noncash,    backgroundColor: '#93c5fd', borderRadius: 3 },
+    ],
+  },
+  options: baseOpts(),
+});
+
+/* ════════════════════════════════════════════════════════════════
+   CHART: Expense Composition (Overall)
+   ════════════════════════════════════════════════════════════════ */
+charts['chart-exp-comp'] = new Chart(document.getElementById('chart-exp-comp'), {
+  type: 'bar',
+  data: {
+    labels: YEARS.map(String),
+    datasets: [
+      { label: 'Salaries & Benefits',  data: SUMMARY.salaries,       backgroundColor: '#f97316', borderRadius: 3 },
+      { label: 'Food Distribution',    data: SUMMARY.food,           backgroundColor: '#fbbf24', borderRadius: 3 },
+      { label: 'Other Operating',      data: SUMMARY.otherExpenses,  backgroundColor: '#a3a3a3', borderRadius: 3 },
+    ],
+  },
+  options: baseOpts(),
+});
+
+/* ════════════════════════════════════════════════════════════════
+   CHART: Functional Expense Allocation (Overall)
+   ════════════════════════════════════════════════════════════════ */
+charts['chart-functional'] = new Chart(document.getElementById('chart-functional'), {
+  type: 'bar',
+  data: {
+    labels: YEARS.map(String),
+    datasets: [
+      { label: 'Program Services',    data: FUNCTIONAL.program,     backgroundColor: '#2563eb', borderRadius: 3 },
+      { label: 'Management & General', data: FUNCTIONAL.management,  backgroundColor: '#f97316', borderRadius: 3 },
+      { label: 'Fundraising',          data: FUNCTIONAL.fundraising, backgroundColor: '#a855f7', borderRadius: 3 },
+    ],
+  },
+  options: baseOpts({ aspectRatio: 2.5, scales: {
+    x: { stacked: true, grid: { display: false } },
+    y: { stacked: true, ticks: { callback: v => abbrev(v) }, grid: { color: '#f1f5f9' } },
+  }}),
+});
+
+/* ════════════════════════════════════════════════════════════════
+   CHART: Revenue Detail
+   ════════════════════════════════════════════════════════════════ */
+charts['chart-rev-detail'] = new Chart(document.getElementById('chart-rev-detail'), {
+  type: 'bar',
+  data: {
+    labels: YEARS.map(String),
+    datasets: makeDatasets(REVENUE_CATS, REVENUE_COLORS),
+  },
+  options: baseOpts({ aspectRatio: 2.2 }),
+});
+
+/* ════════════════════════════════════════════════════════════════
+   CHART: Expense Detail
+   ════════════════════════════════════════════════════════════════ */
+charts['chart-exp-detail'] = new Chart(document.getElementById('chart-exp-detail'), {
+  type: 'bar',
+  data: {
+    labels: YEARS.map(String),
+    datasets: makeDatasets(EXPENSE_CATS, EXPENSE_COLORS),
+  },
+  options: baseOpts({
+    aspectRatio: 2.2,
+    plugins: {
+      legend: { position: 'top', labels: { boxWidth: 12, padding: 10, font: { size: 11 } } },
+      tooltip: {
+        callbacks: {
+          label: ctx => `${ctx.dataset.label}: ${fmt.format(ctx.parsed.y)}`,
+          afterLabel: ctx => EXPENSE_GROUP_DETAIL[ctx.dataset.label] || '',
+        },
+      },
+    },
+  }),
+});
+
+/* ════════════════════════════════════════════════════════════════
+   TAB SWITCHING
+   ════════════════════════════════════════════════════════════════ */
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(s => s.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.tab).classList.add('active');
+    /* Trigger resize so Chart.js reflows into newly-visible containers */
+    window.dispatchEvent(new Event('resize'));
+  });
+});
+
+/* ════════════════════════════════════════════════════════════════
+   STACKED / GROUPED TOGGLES
+   ════════════════════════════════════════════════════════════════ */
+document.querySelectorAll('.toggle-group').forEach(group => {
+  group.querySelectorAll('.toggle-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      group.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      setStacked(btn.dataset.chart, btn.dataset.mode === 'stacked');
+    });
+  });
+});
+
+/* ════════════════════════════════════════════════════════════════
+   NONCASH (FOOD) TOGGLE — Revenue Detail
+   ════════════════════════════════════════════════════════════════ */
+const NONCASH_DATASET = {
+  label: 'Noncash (Food) Donations',
+  data: SUMMARY.noncash,
+  backgroundColor: '#93c5fd',
+  borderRadius: 3,
+};
+
+document.getElementById('noncash-toggle').addEventListener('change', function() {
+  const chart = charts['chart-rev-detail'];
+  if (this.checked) {
+    chart.data.datasets.push(NONCASH_DATASET);
+  } else {
+    chart.data.datasets = chart.data.datasets.filter(ds => ds.label !== NONCASH_DATASET.label);
+  }
+  chart.update();
+});
+</script>
+
+</body>
+</html>
