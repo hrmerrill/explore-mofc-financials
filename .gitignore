@@ -205,3 +205,9 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Raw PDF data (too large for git)
+data/raw/*.pdf
+
+# Generated output
+data/processed/
