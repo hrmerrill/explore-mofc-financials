@@ -425,7 +425,7 @@
               <label class="switch-group">
                 <input type="checkbox" id="food-toggle">
                 <span class="switch-track"></span>
-                Show Food Costs
+                Show Food (Monetary Value)
               </label>
               <div class="toggle-group">
                 <button class="toggle-btn active" data-chart="chart-exp-detail" data-mode="grouped">Grouped</button>
@@ -762,7 +762,7 @@
         labels: YEARS.map(String),
         datasets: [
           { label: 'Salaries & Benefits', data: SUMMARY.salaries, backgroundColor: '#f97316', borderRadius: 3 },
-          { label: 'Food Distribution', data: SUMMARY.food, backgroundColor: '#fbbf24', borderRadius: 3 },
+          { label: 'Food (Monetary Value)', data: SUMMARY.food, backgroundColor: '#fbbf24', borderRadius: 3 },
           { label: 'Other Operating', data: SUMMARY.otherExpenses, backgroundColor: '#a3a3a3', borderRadius: 3 },
         ],
       },
