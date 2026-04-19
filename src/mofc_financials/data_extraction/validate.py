@@ -14,19 +14,22 @@ This module provides a two-stage workflow:
 **Stage 2 — Manual correction + re-validation** (iterate until clean)::
 
     # 1. Copy extraction output to editable files (only needed once)
+    cp data/processed/mofc_990_financials.csv \\
+       data/processed/mofc_990_financials_manual_edits.csv
     cp data/processed/mofc_990_revenue_detail.csv \\
        data/processed/mofc_990_revenue_detail_manual_edits.csv
     cp data/processed/mofc_990_expense_detail.csv \\
        data/processed/mofc_990_expense_detail_manual_edits.csv
 
     # 2. Open the report and fix values in the *_manual_edits.csv files
-    #    Compare against source PDFs in data/raw/ as needed.
+    #    (summary and detail).  Compare against source PDFs in data/raw/.
 
     # 3. Re-validate the edited files (no OCR required)
     mofc-validate
 
-``mofc-validate`` reads ``*_manual_edits.csv`` when present, falling back
-to the original extraction CSVs, and overwrites the validation report.
+``mofc-validate`` reads ``*_manual_edits.csv`` when present (for both the
+Part I summary and the Part VIII/IX detail files), falling back to the
+original extraction CSVs, and overwrites the validation report.
 
 Programmatic usage
 ------------------
@@ -328,9 +331,9 @@ _REVENUE_COMPONENT_LINES = {"1h", "2g", "3", "4", "5", "6d", "7d", "8c", "9c", "
 _CONTRIBUTION_ADDITIVE_LINES = {"1a", "1b", "1c", "1d", "1e", "1f"}
 
 # Tolerance thresholds
-_CROSS_VALIDATION_TOLERANCE = 0.02  # 2 % for detail-vs-summary checks
-_SUBLINE_SUM_TOLERANCE = 0.05  # 5 % for subline sums (missing lines expected)
-_COLUMN_SUM_TOLERANCE = 0.02  # 2 % for col_b+c+d vs col_a
+_CROSS_VALIDATION_TOLERANCE = 0.0001  # 0.01 % for detail-vs-summary checks
+_SUBLINE_SUM_TOLERANCE = 0.0001  # 0.01 % for subline sums
+_COLUMN_SUM_TOLERANCE = 0.0001  # 0.01 % for col_b+c+d vs col_a
 
 # Sentinel key used in all_issues for cross-year findings
 _CROSS_YEAR_KEY = "cross-year"
@@ -387,6 +390,77 @@ def check_label_consistency(
                         f"across years — {detail}",
                     )
                 )
+
+    return issues
+
+
+def check_line_presence_consistency(
+    revenue_by_year: dict[str, list[LineItemRow]],
+    expenses_by_year: dict[str, list[LineItemRow]],
+) -> list[ValidationIssue]:
+    """Warn when a line number appears in some tax years but not others.
+
+    Parameters
+    ----------
+    revenue_by_year : dict[str, list[LineItemRow]]
+        Revenue detail rows grouped by tax year.
+    expenses_by_year : dict[str, list[LineItemRow]]
+        Expense detail rows grouped by tax year.
+
+    Returns
+    -------
+    list[ValidationIssue]
+        One warning per line number that is present in at least one year
+        but absent from at least one other year, for each section (revenue
+        and expenses).  All issues use the sentinel year ``"cross-year"``.
+    """
+    issues: list[ValidationIssue] = []
+
+    for section_name, by_year in [
+        ("revenue", revenue_by_year),
+        ("expense", expenses_by_year),
+    ]:
+        all_years = sorted(by_year.keys())
+        if len(all_years) < 2:
+            continue
+
+        # Map line_number -> set of years that contain that line
+        presence: dict[str, set[str]] = {}
+        for year, rows in by_year.items():
+            for row in rows:
+                ln = row.get("line_number", "")
+                if ln:
+                    presence.setdefault(ln, set()).add(year)
+
+        all_years_set = set(all_years)
+        for ln, years_present in sorted(presence.items(), key=lambda x: (len(x[0]), x[0])):
+            years_missing = sorted(all_years_set - years_present)
+            if not years_missing:
+                continue
+
+            # Find a representative label from a year that has this line
+            label = ""
+            for year in sorted(years_present):
+                for row in by_year[year]:
+                    if row.get("line_number") == ln:
+                        candidate = row.get("label", "").strip()
+                        if candidate:
+                            label = candidate
+                        break
+                if label:
+                    break
+
+            label_part = f" ({label})" if label else ""
+            issues.append(
+                ValidationIssue(
+                    _CROSS_YEAR_KEY,
+                    "WARNING",
+                    "line_presence",
+                    f"{section_name.capitalize()} line {ln}{label_part} present in "
+                    f"{', '.join(sorted(years_present))} but missing from "
+                    f"{', '.join(years_missing)}",
+                )
+            )
 
     return issues
 
@@ -662,29 +736,6 @@ def _check_internal_consistency(
                 )
             )
 
-    # Per-row: col_b + col_c + col_d ≈ col_a for every revenue row with all columns present
-    for row in revenue:
-        col_a = _to_int(row.get("col_a", ""))
-        col_b = _to_int(row.get("col_b", "")) or 0
-        col_c = _to_int(row.get("col_c", "")) or 0
-        col_d = _to_int(row.get("col_d", "")) or 0
-        if col_a is None or not any([col_b, col_c, col_d]):
-            continue
-        col_sum = col_b + col_c + col_d
-        diff = _pct_diff(col_sum, col_a)
-        if diff > _COLUMN_SUM_TOLERANCE:
-            ln = row.get("line_number", "?")
-            label = row.get("label", "")
-            issues.append(
-                ValidationIssue(
-                    year,
-                    "WARNING",
-                    "internal_consistency",
-                    f"Revenue line {ln} ({label}): col_b+c+d={col_sum:,} vs total={col_a:,} "
-                    f"({diff:.1%} difference)",
-                )
-            )
-
 
 def _check_duplicates(
     year: str,
@@ -804,6 +855,11 @@ def format_report(
     lines.append("This report flags values that may need manual correction.")
     lines.append("Compare flagged items against the source PDFs in data/raw/.")
     lines.append("")
+    lines.append("To correct summary values, edit mofc_990_financials_manual_edits.csv.")
+    lines.append("To correct detail values, edit mofc_990_revenue_detail_manual_edits.csv")
+    lines.append("  and mofc_990_expense_detail_manual_edits.csv.")
+    lines.append("Run mofc-validate to re-validate after editing.")
+    lines.append("")
 
     total_errors = 0
     total_warnings = 0
@@ -845,9 +901,18 @@ def format_report(
     if cross_year:
         total_warnings += len(cross_year)
         lines.append("--- cross-year ---")
-        lines.append("WARNINGS (label inconsistencies across tax years):")
-        for w in cross_year:
-            lines.append(f"  ⚠ [{w.category.upper()}] {w.message}")
+        label_issues = [w for w in cross_year if w.category == "label_consistency"]
+        presence_issues = [w for w in cross_year if w.category == "line_presence"]
+        if label_issues:
+            lines.append("WARNINGS (label inconsistencies across tax years):")
+            for w in label_issues:
+                lines.append(f"  ⚠ [{w.category.upper()}] {w.message}")
+        if presence_issues:
+            if label_issues:
+                lines.append("")
+            lines.append("WARNINGS (lines present in some years but not others):")
+            for w in presence_issues:
+                lines.append(f"  ⚠ [{w.category.upper()}] {w.message}")
         lines.append("")
 
     # Summary table
@@ -945,8 +1010,11 @@ def run_pipeline(
         # Step 3: Validate
         all_issues[year] = validate_year(year, summary, revenue, expenses)
 
-    # Step 4: Cross-year label consistency
-    all_issues[_CROSS_YEAR_KEY] = check_label_consistency(revenue_by_year, expenses_by_year)
+    # Step 4: Cross-year label consistency and line presence
+    all_issues[_CROSS_YEAR_KEY] = [
+        *check_label_consistency(revenue_by_year, expenses_by_year),
+        *check_line_presence_consistency(revenue_by_year, expenses_by_year),
+    ]
 
     # Write CSVs
     summary_path = output_dir / "mofc_990_financials.csv"
@@ -1003,12 +1071,14 @@ def run_validation_only(output_dir: Path) -> dict[str, list[ValidationIssue]]:
     SystemExit
         If the summary CSV or any required detail CSV is not found.
     """
-    summary_path = output_dir / "mofc_990_financials.csv"
+    # Prefer *_manual_edits.csv, fall back to original extraction CSV
+    summary_path = output_dir / "mofc_990_financials_manual_edits.csv"
+    if not summary_path.exists():
+        summary_path = output_dir / "mofc_990_financials.csv"
     if not summary_path.exists():
         print(f"Summary CSV not found: {summary_path}", file=sys.stderr)
         sys.exit(1)
 
-    # Prefer *_manual_edits.csv, fall back to original extraction CSV
     rev_path = output_dir / "mofc_990_revenue_detail_manual_edits.csv"
     if not rev_path.exists():
         rev_path = output_dir / "mofc_990_revenue_detail.csv"
@@ -1022,7 +1092,9 @@ def run_validation_only(output_dir: Path) -> dict[str, list[ValidationIssue]]:
             print(f"Detail CSV not found: {p}", file=sys.stderr)
             sys.exit(1)
 
-    print(f"Validating {rev_path.name} and {exp_path.name}...", file=sys.stderr)
+    print(
+        f"Validating {summary_path.name}, {rev_path.name} and {exp_path.name}...", file=sys.stderr
+    )
 
     summary_by_year = _read_summary_csv(summary_path)
 
@@ -1042,10 +1114,13 @@ def run_validation_only(output_dir: Path) -> dict[str, list[ValidationIssue]]:
         expenses = expenses_by_year.get(year, [])
         all_issues[year] = validate_year(year, summary, revenue, expenses)
 
-    # Cross-year label consistency
-    all_issues[_CROSS_YEAR_KEY] = check_label_consistency(revenue_by_year, expenses_by_year)
+    # Cross-year label consistency and line presence
+    all_issues[_CROSS_YEAR_KEY] = [
+        *check_label_consistency(revenue_by_year, expenses_by_year),
+        *check_line_presence_consistency(revenue_by_year, expenses_by_year),
+    ]
 
-    output_files = [str(rev_path), str(exp_path)]
+    output_files = [str(summary_path), str(rev_path), str(exp_path)]
     report = format_report(all_issues, revenue_counts, expense_counts, output_files)
     report_path = output_dir / "mofc_990_validation_report.txt"
     report_path.write_text(report)

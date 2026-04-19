@@ -22,6 +22,7 @@ from mofc_financials.data_extraction.validate import (
     _read_summary_csv,
     _to_int,
     check_label_consistency,
+    check_line_presence_consistency,
     format_report,
     run_validation_only,
     validate_year,
@@ -197,7 +198,7 @@ class TestValidateYear:
         assert any("Expense line 7" in i.message for i in consistency)
 
     def test_revenue_row_column_mismatch(self) -> None:
-        """Individual revenue row where col_b+c+d != col_a should warn."""
+        """Revenue rows where col_b+c+d != col_a should NOT warn (check removed)."""
         bad_revenue: list[LineItemRow] = [
             *[r for r in _GOOD_REVENUE if r["line_number"] != "3"],
             {
@@ -211,7 +212,7 @@ class TestValidateYear:
         ]
         issues = validate_year("2023", _GOOD_SUMMARY, bad_revenue, _GOOD_EXPENSES)
         consistency = [i for i in issues if i.category == "internal_consistency"]
-        assert any("Revenue line 3" in i.message for i in consistency)
+        assert not any("Revenue line 3" in i.message for i in consistency)
 
     def test_duplicate_line_numbers(self) -> None:
         """Duplicate line numbers should produce a warning."""
@@ -385,6 +386,77 @@ class TestCheckLabelConsistency:
         # Blank label in 2022 should be skipped; only one real label, no warning
         issues = check_label_consistency(revenue, {})
         assert len(issues) == 0
+
+
+# =========================================================================
+# check_line_presence_consistency — cross-year presence checks
+# =========================================================================
+
+
+class TestCheckLinePresenceConsistency:
+    """Tests for cross-year line presence checking."""
+
+    def test_consistent_presence_no_warnings(self) -> None:
+        revenue = {
+            "2022": [{"line_number": "12", "label": "Total revenue", "col_a": "100"}],
+            "2023": [{"line_number": "12", "label": "Total revenue", "col_a": "200"}],
+        }
+        issues = check_line_presence_consistency(revenue, {})
+        assert len(issues) == 0
+
+    def test_missing_revenue_line_warns(self) -> None:
+        revenue = {
+            "2022": [
+                {"line_number": "12", "label": "Total revenue", "col_a": "100"},
+                {"line_number": "3", "label": "Investment income", "col_a": "50"},
+            ],
+            "2023": [{"line_number": "12", "label": "Total revenue", "col_a": "200"}],
+        }
+        issues = check_line_presence_consistency(revenue, {})
+        assert len(issues) == 1
+        issue = issues[0]
+        assert issue.year == "cross-year"
+        assert issue.severity == "WARNING"
+        assert issue.category == "line_presence"
+        assert "Revenue line 3" in issue.message
+        assert "2022" in issue.message
+        assert "2023" in issue.message
+
+    def test_missing_expense_line_warns(self) -> None:
+        expenses = {
+            "2022": [{"line_number": "11b", "label": "Legal fees", "col_a": "10"}],
+            "2023": [],
+        }
+        issues = check_line_presence_consistency({}, expenses)
+        assert len(issues) == 1
+        assert "Expense line 11b" in issues[0].message
+
+    def test_label_included_in_message(self) -> None:
+        revenue = {
+            "2022": [{"line_number": "5", "label": "Royalties", "col_a": "1"}],
+            "2023": [{"line_number": "12", "label": "Total revenue", "col_a": "2"}],
+        }
+        issues = check_line_presence_consistency(revenue, {})
+        assert any("Royalties" in i.message for i in issues)
+
+    def test_single_year_no_warnings(self) -> None:
+        revenue = {"2023": [{"line_number": "12", "label": "Total revenue", "col_a": "100"}]}
+        assert check_line_presence_consistency(revenue, {}) == []
+
+    def test_empty_inputs_no_issues(self) -> None:
+        assert check_line_presence_consistency({}, {}) == []
+
+    def test_multiple_missing_years(self) -> None:
+        revenue = {
+            "2021": [{"line_number": "9c", "label": "Gaming", "col_a": "5"}],
+            "2022": [{"line_number": "12", "label": "Total revenue", "col_a": "1"}],
+            "2023": [{"line_number": "12", "label": "Total revenue", "col_a": "2"}],
+        }
+        issues = check_line_presence_consistency(revenue, {})
+        presence_issues = [i for i in issues if "9c" in i.message]
+        assert len(presence_issues) == 1
+        assert "2022" in presence_issues[0].message
+        assert "2023" in presence_issues[0].message
 
 
 # =========================================================================
