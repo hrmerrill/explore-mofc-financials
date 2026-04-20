@@ -1,5 +1,7 @@
 # Explore Mid-Ohio Food Collective Financials
 
+> **Disclaimer:** This is a personal project and is not affiliated with, endorsed by, or officially connected to the Mid-Ohio Food Collective (MOFC). All financial figures are extracted via OCR from publicly available IRS filings and have not been verified by MOFC. Use at your own discretion.
+
 MOFC posts their financials [here](https://mofc.org/financials/). I'm interested in finding opportunities for optimization, and the first step is understanding where the money is currently coming from and going. This repo contains code for extracting and analyzing this data.
 
 ## Raw Data

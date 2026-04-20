@@ -123,6 +123,7 @@ FIELDNAMES = [
     "donated_lbs_oh_food",
     "donated_lbs_industry",
     "purchased_lbs",
+    "meals_per_dollar",
 ]
 
 
@@ -231,6 +232,16 @@ def compute_metrics(
 
     purchase_cost_per_lb = _safe_div(purchased_val, purchased_lbs)
 
+    # Meals per dollar of food purchased (cash donation purchasing power).
+    # Matches MOFC's public "2.5 meals per $1 donated" methodology.
+    purchase_cost_per_meal = _safe_div(
+        purchase_cost_per_lb if isinstance(purchase_cost_per_lb, float) else None,
+        MEALS_PER_POUND,
+    )
+    meals_per_dollar = _safe_div(
+        1.0, purchase_cost_per_meal if isinstance(purchase_cost_per_meal, float) else None
+    )
+
     lbs_per_employee = _safe_div(total_lbs, employees)
     lbs_per_labor_dollar = _safe_div(total_lbs, total_labor)
 
@@ -273,6 +284,7 @@ def compute_metrics(
         "donated_lbs_oh_food": donated_lbs_oh_food,
         "donated_lbs_industry": donated_lbs_industry,
         "purchased_lbs": purchased_distributed_lbs,
+        "meals_per_dollar": _fmt(meals_per_dollar),
     }
 
 

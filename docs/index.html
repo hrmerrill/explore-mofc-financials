@@ -364,6 +364,64 @@
         grid-template-columns: 1fr;
       }
     }
+
+    /* ── Donation Calculator ── */
+    .donation-calc {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: .3rem;
+      margin-top: .75rem;
+      padding: .6rem .75rem;
+      background: #eff6ff;
+      border-radius: 6px;
+      font-size: .85rem;
+      font-weight: 500;
+      color: var(--text);
+    }
+
+    .donation-calc span {
+      white-space: nowrap;
+    }
+
+    .donation-input-wrap {
+      display: inline-flex;
+      align-items: center;
+      position: relative;
+    }
+
+    .donation-input-wrap::before {
+      content: '$';
+      position: absolute;
+      left: .6rem;
+      font-weight: 700;
+      color: var(--accent);
+      pointer-events: none;
+    }
+
+    .donation-input {
+      width: 4.5rem;
+      padding: .25rem .4rem .25rem 1.1rem;
+      border: 2px solid var(--accent);
+      border-radius: 6px;
+      font-size: .85rem;
+      font-weight: 700;
+      color: var(--accent);
+      background: #fff;
+      text-align: right;
+      outline: none;
+      transition: box-shadow .15s;
+    }
+
+    .donation-input:focus {
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, .25);
+    }
+
+    #donation-meals {
+      font-weight: 700;
+      color: var(--accent);
+    }
   </style>
 </head>
 
@@ -517,15 +575,15 @@
         </div>
         <div class="chart-card">
           <div class="chart-header">
-            <h3>Food Volume by Source</h3>
-          </div>
-          <canvas id="chart-food-volume"></canvas>
-        </div>
-        <div class="chart-card">
-          <div class="chart-header">
             <h3>Waste Rate</h3>
           </div>
           <canvas id="chart-waste-rate"></canvas>
+        </div>
+        <div class="chart-card full-width">
+          <div class="chart-header">
+            <h3>Food Volume by Source</h3>
+          </div>
+          <canvas id="chart-food-volume"></canvas>
         </div>
       </div>
     </section>
@@ -534,6 +592,13 @@
     <section id="about" class="tab-content">
       <div class="chart-card" style="max-width: 720px; margin: 0 auto; min-height: auto;">
         <h2 style="font-size: 1.25rem; margin-bottom: 1rem;">About This Dashboard</h2>
+        <p
+          style="margin-bottom: 1rem; padding: .75rem; border-left: 3px solid var(--accent); background: rgba(255,255,255,.04); color: var(--text-muted); font-size: .85rem;">
+          <strong>Disclaimer:</strong> This is a personal project and is not affiliated with, endorsed by, or
+          officially connected to the Mid-Ohio Food Collective (MOFC). All financial figures are extracted
+          programmatically
+          from publicly available audits and IRS filings and have not been verified by MOFC. Use at your own discretion.
+        </p>
         <p style="margin-bottom: 1rem; color: var(--text-muted);">
           This dashboard was built to visualize the financial data published by the
           <a href="https://mofc.org" target="_blank" rel="noopener" style="color: var(--accent);">Mid-Ohio Food
@@ -581,7 +646,8 @@
   </main>
 
   <footer>
-    Community project — data extracted from IRS Form 990 filings via OCR and may contain errors.
+    Not affiliated with MOFC — data extracted from IRS Form 990 filings via OCR, not verified by MOFC, and may contain
+    errors.
     <a href="https://github.com/hrmerrill/explore-mofc-financials/issues" target="_blank" rel="noopener">Corrections
       welcome</a> ·
     Source PDFs: <a href="https://mofc.org/financials/" target="_blank" rel="noopener">mofc.org/financials</a>
@@ -786,8 +852,8 @@
       }
 
       const EFFICIENCY = {
-        opCostPerMeal: effByYear('operating_cost_per_meal'),
-        mealsPerDollar: effByYear('operating_cost_per_meal').map(v => (v != null && v > 0) ? 1 / v : null),
+        purchaseCostPerLb: effByYear('purchase_cost_per_lb'),
+        mealsPerDollar: effByYear('meals_per_dollar'),
         estimatedMeals: effByYear('estimated_meals'),
         wasteRate: effByYear('waste_rate_pct'),
         lbsPerEmployee: effByYear('lbs_per_employee'),
@@ -828,6 +894,7 @@
       <span class="kpi-label">${c.label}</span>
       <span class="kpi-value ${c.cls || ''}">${c.value}</span>
       ${c.sub ? `<span class="kpi-sub">${c.sub}</span>` : ''}
+      ${c.extra || ''}
     </div>
   `).join('');
     }
@@ -922,21 +989,19 @@
       const avgNetIncome = avg(SUMMARY.netIncome);
       const avgNetAssets = avg(SUMMARY.netAssets);
 
-      /* Avg cost per meal for overall KPI */
-      const avgOpCostOverall = avg(EFFICIENCY.opCostPerMeal);
+      /* Latest purchase cost per meal for overall KPI (cash cost per lb / 1.2 meals per lb) */
+      const latestCostPerLb = [...EFFICIENCY.purchaseCostPerLb].reverse().find(v => v != null && v > 0);
+      const latestCostPerMeal = latestCostPerLb ? latestCostPerLb / 1.2 : 0;
 
-      /* Meals per dollar = 1 / operating cost per meal, averaged over years with data */
-      const mealsPerDollarArr = EFFICIENCY.mealsPerDollar
-        .filter(v => v != null && v > 0);
-      const avgMealsPerDollar = mealsPerDollarArr.length
-        ? mealsPerDollarArr.reduce((s, v) => s + v, 0) / mealsPerDollarArr.length
-        : 0;
+      /* Meals per dollar — latest year with data */
+      const latestMealsPerDollar = [...EFFICIENCY.mealsPerDollar].reverse().find(v => v != null && v > 0) || 0;
+      const latestMpdYear = 'FY ' + EFF_FISCAL[EFFICIENCY.mealsPerDollar.lastIndexOf(latestMealsPerDollar)];
 
       renderKpi('kpi-overall', [
         {
-          label: 'Avg Cost/Meal',
-          value: avgOpCostOverall ? '$' + avgOpCostOverall.toFixed(2) : 'N/A',
-          sub: '5-year average',
+          label: 'Cost/Meal',
+          value: latestCostPerMeal ? '$' + latestCostPerMeal.toFixed(2) : 'N/A',
+          sub: latestMpdYear,
         },
         {
           label: 'Avg Total Revenue', value: abbrev(avgRevenue),
@@ -1256,8 +1321,15 @@
       renderKpi('kpi-efficiency', [
         {
           label: 'Meals Served per Dollar',
-          value: avgMealsPerDollar.toFixed(2),
-          sub: EFFICIENCY.mealsPerDollar.filter(v => v != null && v > 0).length + '-year average'
+          value: latestMealsPerDollar ? latestMealsPerDollar.toFixed(2) : 'N/A',
+          sub: latestMpdYear,
+          extra: `<div class="donation-calc">
+            <span><a href="https://mofc.org/get-involved/donate/" target="_blank" rel="noopener">Donating</a></span>
+            <span class="donation-input-wrap">
+              <input id="donation-amount" class="donation-input" type="number" min="1" step="1" value="50">
+            </span>
+            <span>serves <strong id="donation-meals">—</strong> meals.</span>
+          </div>`
         },
         {
           label: 'Total Meals Served',
@@ -1317,6 +1389,21 @@
           },
         },
       });
+
+      /* Donation calculator — dynamic meals estimate */
+      const donationInput = document.getElementById('donation-amount');
+      const donationMealsEl = document.getElementById('donation-meals');
+      function updateDonationMeals() {
+        const dollars = parseFloat(donationInput.value);
+        if (!isFinite(dollars) || dollars <= 0 || latestMealsPerDollar <= 0) {
+          donationMealsEl.textContent = '—';
+          return;
+        }
+        const meals = Math.round(dollars * latestMealsPerDollar);
+        donationMealsEl.textContent = meals.toLocaleString();
+      }
+      donationInput.addEventListener('input', updateDonationMeals);
+      updateDonationMeals();
 
       /* Food Volume chart */
       const EFF_COLORS = ['#1e40af', '#0891b2', '#059669', '#65a30d', '#ca8a04'];
