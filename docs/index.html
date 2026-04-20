@@ -85,6 +85,51 @@
       color: var(--text);
     }
 
+    /* ── Subtabs (segmented control) ── */
+    .subtab-bar {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .subtab-group {
+      display: inline-flex;
+      background: var(--border);
+      border-radius: var(--radius);
+      padding: 3px;
+      gap: 2px;
+    }
+
+    .subtab-btn {
+      padding: .45rem 1.25rem;
+      border: none;
+      border-radius: calc(var(--radius) - 2px);
+      background: transparent;
+      color: var(--text-muted);
+      font-size: .85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .15s, color .15s, box-shadow .15s;
+    }
+
+    .subtab-btn:hover {
+      color: var(--text);
+    }
+
+    .subtab-btn.active {
+      background: var(--card);
+      color: var(--accent);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, .1);
+    }
+
+    .subtab-content {
+      display: none;
+    }
+
+    .subtab-content.active {
+      display: block;
+    }
+
     /* ── Main ── */
     main {
       max-width: 1280px;
@@ -307,6 +352,11 @@
       .chart-card.full-width canvas {
         min-height: 300px;
       }
+
+      .subtab-btn {
+        padding: .4rem .9rem;
+        font-size: .8rem;
+      }
     }
 
     @media (max-width: 480px) {
@@ -320,8 +370,8 @@
 <body>
 
   <header>
-    <h1>Mid-Ohio Food Collective Financial Dashboard</h1>
-    <p>IRS Form 990 Data · Fiscal Years 2020–2024 (July–June)</p>
+    <h1>Mid-Ohio Food Collective Dashboard</h1>
+    <p>IRS Form 990 &amp; Annual Audit Data · Fiscal Years 2019–2024 (July–June)</p>
     <p style="font-size:.75rem; color:#94a3b8; margin-top:.35rem;">
       Community project — data may contain errors.
       <a href="#" onclick="event.preventDefault(); document.querySelector('[data-tab=about]').click();"
@@ -330,115 +380,152 @@
   </header>
 
   <nav class="tabs">
-    <button class="tab-btn active" data-tab="overall">Overall</button>
-    <button class="tab-btn" data-tab="revenue">Revenue</button>
-    <button class="tab-btn" data-tab="expenses">Expenses</button>
+    <button class="tab-btn active" data-tab="efficiency">Impact & Efficiency</button>
+    <button class="tab-btn" data-tab="finances">Finances</button>
     <button class="tab-btn" data-tab="about">About</button>
   </nav>
 
   <main>
 
-    <!-- ═══════════════ OVERALL ═══════════════ -->
-    <section id="overall" class="tab-content active">
-      <div class="kpi-row" id="kpi-overall"></div>
-      <div class="chart-grid">
-        <div class="chart-card">
-          <div class="chart-header">
-            <h3>Revenue vs. Expenses</h3>
-            <label class="switch-group">
-              <input type="checkbox" id="overall-food-toggle" checked>
-              <span class="switch-track"></span>
-              Include Food
-            </label>
-          </div>
-          <canvas id="chart-rev-exp"></canvas>
+    <!-- ═══════════════ FINANCES (combined tab) ═══════════════ -->
+    <section id="finances" class="tab-content">
+      <div class="subtab-bar">
+        <div class="subtab-group">
+          <button class="subtab-btn active" data-subtab="overall">Overall</button>
+          <button class="subtab-btn" data-subtab="revenue">Revenue</button>
+          <button class="subtab-btn" data-subtab="expenses">Expenses</button>
         </div>
-        <div class="chart-card">
-          <div class="chart-header">
-            <h3>Surplus / Deficit</h3>
-          </div>
-          <canvas id="chart-net-income"></canvas>
-        </div>
-        <div class="chart-card">
-          <div class="chart-header">
-            <h3>Revenue Composition</h3>
-            <div class="toggle-group">
-              <button class="toggle-btn active" data-chart="chart-rev-comp" data-mode="grouped">Grouped</button>
-              <button class="toggle-btn" data-chart="chart-rev-comp" data-mode="stacked">Stacked</button>
+      </div>
+
+      <!-- ── Overall subtab ── -->
+      <div id="subtab-overall" class="subtab-content active">
+        <div class="kpi-row" id="kpi-overall"></div>
+        <div class="chart-grid">
+          <div class="chart-card">
+            <div class="chart-header">
+              <h3>Revenue vs. Expenses</h3>
+              <label class="switch-group">
+                <input type="checkbox" id="overall-food-toggle" checked>
+                <span class="switch-track"></span>
+                Include Food
+              </label>
             </div>
+            <canvas id="chart-rev-exp"></canvas>
           </div>
-          <canvas id="chart-rev-comp"></canvas>
-        </div>
-        <div class="chart-card">
-          <div class="chart-header">
-            <h3>Expense Composition</h3>
-            <div class="toggle-group">
-              <button class="toggle-btn active" data-chart="chart-exp-comp" data-mode="grouped">Grouped</button>
-              <button class="toggle-btn" data-chart="chart-exp-comp" data-mode="stacked">Stacked</button>
+          <div class="chart-card">
+            <div class="chart-header">
+              <h3>Surplus / Deficit</h3>
             </div>
+            <canvas id="chart-net-income"></canvas>
           </div>
-          <canvas id="chart-exp-comp"></canvas>
-        </div>
-        <div class="chart-card full-width">
-          <div class="chart-header">
-            <h3>Functional Expense Allocation</h3>
-            <div class="toggle-group">
-              <button class="toggle-btn" data-chart="chart-functional" data-mode="grouped">Grouped</button>
-              <button class="toggle-btn active" data-chart="chart-functional" data-mode="stacked">Stacked</button>
+          <div class="chart-card">
+            <div class="chart-header">
+              <h3>Revenue Composition</h3>
+              <div class="toggle-group">
+                <button class="toggle-btn active" data-chart="chart-rev-comp" data-mode="grouped">Grouped</button>
+                <button class="toggle-btn" data-chart="chart-rev-comp" data-mode="stacked">Stacked</button>
+              </div>
             </div>
+            <canvas id="chart-rev-comp"></canvas>
           </div>
-          <canvas id="chart-functional"></canvas>
+          <div class="chart-card">
+            <div class="chart-header">
+              <h3>Expense Composition</h3>
+              <div class="toggle-group">
+                <button class="toggle-btn active" data-chart="chart-exp-comp" data-mode="grouped">Grouped</button>
+                <button class="toggle-btn" data-chart="chart-exp-comp" data-mode="stacked">Stacked</button>
+              </div>
+            </div>
+            <canvas id="chart-exp-comp"></canvas>
+          </div>
+          <div class="chart-card full-width">
+            <div class="chart-header">
+              <h3>Functional Expense Allocation</h3>
+              <div class="toggle-group">
+                <button class="toggle-btn" data-chart="chart-functional" data-mode="grouped">Grouped</button>
+                <button class="toggle-btn active" data-chart="chart-functional" data-mode="stacked">Stacked</button>
+              </div>
+            </div>
+            <canvas id="chart-functional"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Revenue subtab ── -->
+      <div id="subtab-revenue" class="subtab-content">
+        <p class="section-note">Noncash (food) contributions available via toggle.</p>
+        <div class="kpi-row" id="kpi-revenue"></div>
+        <div class="chart-grid">
+          <div class="chart-card full-width">
+            <div class="chart-header">
+              <h3>Cash Revenue by Category</h3>
+              <div class="chart-controls">
+                <label class="switch-group">
+                  <input type="checkbox" id="noncash-toggle">
+                  <span class="switch-track"></span>
+                  Show Noncash (Food)
+                </label>
+                <div class="toggle-group">
+                  <button class="toggle-btn active" data-chart="chart-rev-detail" data-mode="grouped">Grouped</button>
+                  <button class="toggle-btn" data-chart="chart-rev-detail" data-mode="stacked">Stacked</button>
+                </div>
+              </div>
+            </div>
+            <canvas id="chart-rev-detail"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Expenses subtab ── -->
+      <div id="subtab-expenses" class="subtab-content">
+        <p class="section-note">Salaries &amp; benefits excluded. Noncash food value (~$94–107M) available via toggle.
+        </p>
+        <div class="kpi-row" id="kpi-expenses"></div>
+        <div class="chart-grid">
+          <div class="chart-card full-width">
+            <div class="chart-header">
+              <h3>Operating Expenses by Category</h3>
+              <div class="chart-controls">
+                <label class="switch-group">
+                  <input type="checkbox" id="food-toggle">
+                  <span class="switch-track"></span>
+                  Show Food (Monetary Value)
+                </label>
+                <div class="toggle-group">
+                  <button class="toggle-btn active" data-chart="chart-exp-detail" data-mode="grouped">Grouped</button>
+                  <button class="toggle-btn" data-chart="chart-exp-detail" data-mode="stacked">Stacked</button>
+                </div>
+              </div>
+            </div>
+            <canvas id="chart-exp-detail"></canvas>
+          </div>
         </div>
       </div>
     </section>
 
-    <!-- ═══════════════ REVENUE ═══════════════ -->
-    <section id="revenue" class="tab-content">
-      <p class="section-note">Noncash (food) contributions available via toggle.</p>
-      <div class="kpi-row" id="kpi-revenue"></div>
+    <!-- ═══════════════ EFFICIENCY ═══════════════ -->
+    <section id="efficiency" class="tab-content active">
+      <p class="section-note">Efficiency metrics derived from annual audit reports and 990 filings. Audit data covers FY
+        2019–2024.</p>
+      <div class="kpi-row" id="kpi-efficiency"></div>
       <div class="chart-grid">
-        <div class="chart-card full-width">
+        <div class="chart-card">
           <div class="chart-header">
-            <h3>Cash Revenue by Category</h3>
-            <div class="chart-controls">
-              <label class="switch-group">
-                <input type="checkbox" id="noncash-toggle">
-                <span class="switch-track"></span>
-                Show Noncash (Food)
-              </label>
-              <div class="toggle-group">
-                <button class="toggle-btn active" data-chart="chart-rev-detail" data-mode="grouped">Grouped</button>
-                <button class="toggle-btn" data-chart="chart-rev-detail" data-mode="stacked">Stacked</button>
-              </div>
-            </div>
+            <h3>Meals Served per Dollar</h3>
           </div>
-          <canvas id="chart-rev-detail"></canvas>
+          <canvas id="chart-cost-per-meal"></canvas>
         </div>
-      </div>
-    </section>
-
-    <!-- ═══════════════ EXPENSES ═══════════════ -->
-    <section id="expenses" class="tab-content">
-      <p class="section-note">Salaries &amp; benefits excluded. Noncash food value (~$94–107M) available via toggle. See
-        Overall tab for full picture.</p>
-      <div class="kpi-row" id="kpi-expenses"></div>
-      <div class="chart-grid">
-        <div class="chart-card full-width">
+        <div class="chart-card">
           <div class="chart-header">
-            <h3>Operating Expenses by Category</h3>
-            <div class="chart-controls">
-              <label class="switch-group">
-                <input type="checkbox" id="food-toggle">
-                <span class="switch-track"></span>
-                Show Food (Monetary Value)
-              </label>
-              <div class="toggle-group">
-                <button class="toggle-btn active" data-chart="chart-exp-detail" data-mode="grouped">Grouped</button>
-                <button class="toggle-btn" data-chart="chart-exp-detail" data-mode="stacked">Stacked</button>
-              </div>
-            </div>
+            <h3>Food Volume by Source</h3>
           </div>
-          <canvas id="chart-exp-detail"></canvas>
+          <canvas id="chart-food-volume"></canvas>
+        </div>
+        <div class="chart-card">
+          <div class="chart-header">
+            <h3>Waste Rate</h3>
+          </div>
+          <canvas id="chart-waste-rate"></canvas>
         </div>
       </div>
     </section>
@@ -461,11 +548,6 @@
         </p>
         <h3 style="font-size: 1rem; margin-bottom: .5rem;">What's Missing?</h3>
         <p style="margin-bottom: 1rem; color: var(--text-muted);">
-          <strong>Impact.</strong> MOFC provides food to help <i>people</i>. Reporting meals served per dollar and
-          people served per dollar would more accurately reflect MOFC's impact than a simple financial report like
-          this one.
-        </p>
-        <p style="margin-bottom: 1rem; color: var(--text-muted);">
           <strong>Granularity.</strong> MOFC serves many communities, and visualizing community-specific impact may
           reveal opportunities that are not visible at the overall level.
         </p>
@@ -479,10 +561,11 @@
         <p style="margin-bottom: 1rem; color: var(--text-muted);">
           All data is extracted from MOFC's publicly available
           <a href="https://mofc.org/financials/" target="_blank" rel="noopener" style="color: var(--accent);">IRS Form
-            990 filings</a>
-          (fiscal years 2020–2024). Each fiscal year runs July 1 – June 30; for example, "FY 2024"
-          covers July 2023 through June 2024. PDFs were processed via OCR and manually verified against the source
-          documents. There still may be errors! If so, please let me know.
+            990 filings</a> and annual audit reports
+          (fiscal years 2019–2024). Each fiscal year runs July 1 – June 30; for example, "FY 2024"
+          covers July 2023 through June 2024. 990 PDFs were processed via OCR and manually verified;
+          audit PDFs are text-based and extracted programmatically. There still may be errors! If so, please let me
+          know.
         </p>
         <h3 style="font-size: 1rem; margin-bottom: .5rem;">Feedback &amp; Corrections</h3>
         <p style="color: var(--text-muted);">
@@ -559,15 +642,17 @@
        DATA LOADER
        ════════════════════════════════════════════════════════════════ */
     async function loadData() {
-      const [financialsText, revenueText, expenseText] = await Promise.all([
+      const [financialsText, revenueText, expenseText, efficiencyText] = await Promise.all([
         fetch('data/mofc_990_financials_manual_edits.csv').then(r => r.text()),
         fetch('data/mofc_990_revenue_detail_manual_edits.csv').then(r => r.text()),
         fetch('data/mofc_990_expense_detail_manual_edits.csv').then(r => r.text()),
+        fetch('data/mofc_efficiency_metrics.csv').then(r => r.text()),
       ]);
 
       const financials = parseCSV(financialsText);
       const revenueDetail = parseCSV(revenueText);
       const expenseDetail = parseCSV(expenseText);
+      const efficiency = parseCSV(efficiencyText);
 
       const YEARS = financials.map(r => Number(r.form_year)).sort((a, b) => a - b);
       const FISCAL_YEARS = YEARS.map(y => y + 1);
@@ -689,7 +774,33 @@
         'Other': 'All other expenses',
       };
 
-      return { YEARS, FISCAL_YEARS, SUMMARY, FUNCTIONAL, REVENUE_CATS, EXPENSE_CATS, EXPENSE_GROUP_DETAIL };
+      /* ── EFFICIENCY ── */
+      const EFF_YEARS = efficiency.map(r => Number(r.form_year)).sort((a, b) => a - b);
+      const EFF_FISCAL = EFF_YEARS.map(y => y + 1);
+
+      function effByYear(field) {
+        return EFF_YEARS.map(y => {
+          const row = efficiency.find(r => Number(r.form_year) === y);
+          return row ? num(row[field]) : 0;
+        });
+      }
+
+      const EFFICIENCY = {
+        opCostPerMeal: effByYear('operating_cost_per_meal'),
+        mealsPerDollar: effByYear('operating_cost_per_meal').map(v => (v != null && v > 0) ? 1 / v : null),
+        estimatedMeals: effByYear('estimated_meals'),
+        wasteRate: effByYear('waste_rate_pct'),
+        lbsPerEmployee: effByYear('lbs_per_employee'),
+        totalLbs: effByYear('total_lbs_distributed'),
+        donatedTefap: effByYear('donated_lbs_tefap'),
+        donatedCsfp: effByYear('donated_lbs_csfp'),
+        donatedOhFood: effByYear('donated_lbs_oh_food'),
+        donatedIndustry: effByYear('donated_lbs_industry'),
+        purchasedLbs: effByYear('purchased_lbs'),
+        employees: effByYear('employees'),
+      };
+
+      return { YEARS, FISCAL_YEARS, SUMMARY, FUNCTIONAL, REVENUE_CATS, EXPENSE_CATS, EXPENSE_GROUP_DETAIL, EFF_YEARS, EFF_FISCAL, EFFICIENCY };
     }
 
     /* ════════════════════════════════════════════════════════════════
@@ -794,29 +905,55 @@
        INITIALIZE DASHBOARD
        ════════════════════════════════════════════════════════════════ */
     async function init() {
-      const { YEARS, FISCAL_YEARS, SUMMARY, FUNCTIONAL, REVENUE_CATS, EXPENSE_CATS, EXPENSE_GROUP_DETAIL } = await loadData();
+      const { YEARS, FISCAL_YEARS, SUMMARY, FUNCTIONAL, REVENUE_CATS, EXPENSE_CATS, EXPENSE_GROUP_DETAIL, EFF_YEARS, EFF_FISCAL, EFFICIENCY } = await loadData();
       const li = YEARS.length - 1;
       const latestYear = 'FY ' + FISCAL_YEARS[li];
       const largestRevCat = Object.entries(REVENUE_CATS).reduce((max, e) => e[1][li] > max[1][li] ? e : max);
       const largestExpCat = Object.entries(EXPENSE_CATS).reduce((max, e) => e[1][li] > max[1][li] ? e : max);
 
+      /* ── Helper: average an array of numbers ── */
+      function avg(arr) {
+        const valid = arr.filter(v => v != null && v !== 0);
+        return valid.length ? valid.reduce((s, v) => s + v, 0) / valid.length : 0;
+      }
+
+      const avgRevenue = avg(SUMMARY.totalRevenue);
+      const avgExpenses = avg(SUMMARY.totalExpenses);
+      const avgNetIncome = avg(SUMMARY.netIncome);
+      const avgNetAssets = avg(SUMMARY.netAssets);
+
+      /* Avg cost per meal for overall KPI */
+      const avgOpCostOverall = avg(EFFICIENCY.opCostPerMeal);
+
+      /* Meals per dollar = 1 / operating cost per meal, averaged over years with data */
+      const mealsPerDollarArr = EFFICIENCY.mealsPerDollar
+        .filter(v => v != null && v > 0);
+      const avgMealsPerDollar = mealsPerDollarArr.length
+        ? mealsPerDollarArr.reduce((s, v) => s + v, 0) / mealsPerDollarArr.length
+        : 0;
+
       renderKpi('kpi-overall', [
         {
-          label: latestYear + ' Total Revenue', value: abbrev(SUMMARY.totalRevenue[li]),
-          sub: pctChange(SUMMARY.totalRevenue[li], SUMMARY.totalRevenue[li - 1])
+          label: 'Avg Cost/Meal',
+          value: avgOpCostOverall ? '$' + avgOpCostOverall.toFixed(2) : 'N/A',
+          sub: '5-year average',
         },
         {
-          label: latestYear + ' Total Expenses', value: abbrev(SUMMARY.totalExpenses[li]),
-          sub: pctChange(SUMMARY.totalExpenses[li], SUMMARY.totalExpenses[li - 1])
+          label: 'Avg Total Revenue', value: abbrev(avgRevenue),
+          sub: '5-year average',
         },
         {
-          label: latestYear + ' Net Income', value: abbrev(SUMMARY.netIncome[li]),
-          cls: SUMMARY.netIncome[li] >= 0 ? 'positive' : 'negative',
-          sub: pctChange(SUMMARY.netIncome[li], SUMMARY.netIncome[li - 1])
+          label: 'Avg Total Expenses', value: abbrev(avgExpenses),
+          sub: '5-year average',
         },
         {
-          label: latestYear + ' Net Assets', value: abbrev(SUMMARY.netAssets[li]),
-          sub: pctChange(SUMMARY.netAssets[li], SUMMARY.netAssets[li - 1])
+          label: 'Avg Net Income', value: abbrev(avgNetIncome),
+          sub: '5-year average',
+          cls: avgNetIncome >= 0 ? 'positive' : 'negative',
+        },
+        {
+          label: 'Avg Net Assets', value: abbrev(avgNetAssets),
+          sub: '5-year average',
         },
       ]);
 
@@ -831,7 +968,7 @@
           sub: abbrev(largestRevCat[1][li])
         },
         {
-          label: YEARS.length + '-Year Avg Cash Rev.', value: abbrev(
+          label: YEARS.length + '-Year Avg Cash Revenue', value: abbrev(
             SUMMARY.cashRevenue.reduce((a, b) => a + b, 0) / YEARS.length)
         },
       ]);
@@ -991,9 +1128,23 @@
         });
       });
 
+      /* ════════════════════════════════════════════════════════════════
+         SUBTAB SWITCHING (within Finances tab)
+         ════════════════════════════════════════════════════════════════ */
+      document.querySelectorAll('.subtab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.subtab-btn').forEach(b => b.classList.remove('active'));
+          document.querySelectorAll('.subtab-content').forEach(s => s.classList.remove('active'));
+          btn.classList.add('active');
+          document.getElementById('subtab-' + btn.dataset.subtab).classList.add('active');
+          window.dispatchEvent(new Event('resize'));
+        });
+      });
+
       /* Update chart aspect ratios on viewport resize */
       const DETAIL_CHARTS = ['chart-rev-detail', 'chart-exp-detail', 'chart-functional'];
-      const BASE_CHARTS = ['chart-rev-exp', 'chart-net-income', 'chart-rev-comp', 'chart-exp-comp'];
+      const BASE_CHARTS = ['chart-rev-exp', 'chart-net-income', 'chart-rev-comp', 'chart-exp-comp',
+        'chart-cost-per-meal', 'chart-food-volume', 'chart-waste-rate'];
       window.addEventListener('resize', () => {
         const dar = detailAspect();
         DETAIL_CHARTS.forEach(id => {
@@ -1076,6 +1227,159 @@
         borderRadius: 3,
       };
       wireToggle('food-toggle', 'chart-exp-detail', FOOD_DATASET);
+
+      /* ════════════════════════════════════════════════════════════════
+         EFFICIENCY TAB
+         ════════════════════════════════════════════════════════════════ */
+      const eli = EFF_YEARS.length - 1;
+      const effLatest = 'FY ' + EFF_FISCAL[eli];
+
+      function fmtMeals(v) {
+        if (v >= 1e6) return (v / 1e6).toFixed(1) + 'M';
+        if (v >= 1e3) return (v / 1e3).toFixed(0) + 'K';
+        return v.toString();
+      }
+
+      function fmtLbs(v) {
+        if (v >= 1e6) return (v / 1e6).toFixed(1) + 'M';
+        if (v >= 1e3) return (v / 1e3).toFixed(0) + 'K';
+        return v.toString();
+      }
+
+      const avgMeals = avg(EFFICIENCY.estimatedMeals);
+      const avgWaste = avg(EFFICIENCY.wasteRate);
+
+      renderKpi('kpi-efficiency', [
+        {
+          label: 'Avg Meals per Dollar',
+          value: avgMealsPerDollar.toFixed(2),
+          sub: EFFICIENCY.mealsPerDollar.filter(v => v != null && v > 0).length + '-year average'
+        },
+        {
+          label: 'Total Meals Served',
+          value: fmtMeals(Math.round(avgMeals * EFFICIENCY.estimatedMeals.filter(v => v != null && v !== 0).length)),
+          sub: EFFICIENCY.estimatedMeals.filter(v => v != null && v !== 0).length + '-year total'
+        },
+        {
+          label: 'Avg Waste Rate',
+          value: avgWaste.toFixed(1) + '%',
+          sub: EFFICIENCY.wasteRate.filter(v => v != null && v !== 0).length + '-year average'
+        },
+      ]);
+
+      /* Meals Served per Dollar chart — only years with data */
+      const mpdLabels = [];
+      const mpdData = [];
+      EFF_FISCAL.forEach((fy, i) => {
+        const v = EFFICIENCY.mealsPerDollar[i];
+        if (v != null && v > 0) {
+          mpdLabels.push('FY ' + fy);
+          mpdData.push(v);
+        }
+      });
+
+      charts['chart-cost-per-meal'] = new Chart(document.getElementById('chart-cost-per-meal'), {
+        type: 'line',
+        data: {
+          labels: mpdLabels,
+          datasets: [
+            {
+              label: 'Meals Served per Dollar',
+              data: mpdData,
+              borderColor: '#2563eb',
+              backgroundColor: '#2563eb22',
+              tension: 0.3,
+              fill: false,
+              pointRadius: 4,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          aspectRatio: baseAspect(),
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ' + (ctx.parsed.y ?? 0).toFixed(2) + ' meals' } },
+          },
+          scales: {
+            x: { grid: { display: false } },
+            y: {
+              title: { display: true, text: 'Meals per $1', font: { size: 11 } },
+              ticks: { callback: v => v.toFixed(1) },
+              grid: { color: '#f1f5f9' },
+            },
+          },
+        },
+      });
+
+      /* Food Volume chart */
+      const EFF_COLORS = ['#1e40af', '#0891b2', '#059669', '#65a30d', '#ca8a04'];
+      charts['chart-food-volume'] = new Chart(document.getElementById('chart-food-volume'), {
+        type: 'bar',
+        data: {
+          labels: EFF_FISCAL.map(y => 'FY ' + y),
+          datasets: [
+            { label: 'TEFAP', data: EFFICIENCY.donatedTefap, backgroundColor: EFF_COLORS[0], borderRadius: 3 },
+            { label: 'CSFP', data: EFFICIENCY.donatedCsfp, backgroundColor: EFF_COLORS[1], borderRadius: 3 },
+            { label: 'OH Food Purchase', data: EFFICIENCY.donatedOhFood, backgroundColor: EFF_COLORS[2], borderRadius: 3 },
+            { label: 'Industry Surplus', data: EFFICIENCY.donatedIndustry, backgroundColor: EFF_COLORS[3], borderRadius: 3 },
+            { label: 'Purchased', data: EFFICIENCY.purchasedLbs, backgroundColor: EFF_COLORS[4], borderRadius: 3 },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          aspectRatio: baseAspect(),
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { position: 'top', labels: { boxWidth: 12, padding: 10, font: { size: 11 } } },
+            tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ' + (ctx.parsed.y / 1e6).toFixed(1) + 'M lbs' } },
+          },
+          scales: {
+            x: { stacked: true, grid: { display: false } },
+            y: {
+              stacked: true,
+              title: { display: true, text: 'Pounds', font: { size: 11 } },
+              ticks: { callback: v => (v / 1e6).toFixed(0) + 'M' },
+              grid: { color: '#f1f5f9' },
+            },
+          },
+        },
+      });
+
+      /* Waste Rate chart */
+      charts['chart-waste-rate'] = new Chart(document.getElementById('chart-waste-rate'), {
+        type: 'bar',
+        data: {
+          labels: EFF_FISCAL.map(y => 'FY ' + y),
+          datasets: [{
+            label: 'Waste Rate',
+            data: EFFICIENCY.wasteRate,
+            backgroundColor: '#64748b',
+            borderRadius: 3,
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          aspectRatio: baseAspect(),
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: ctx => 'Waste Rate: ' + ctx.parsed.y.toFixed(2) + '%' } },
+          },
+          scales: {
+            x: { grid: { display: false } },
+            y: {
+              title: { display: true, text: '% of available food', font: { size: 11 } },
+              ticks: { callback: v => v + '%' },
+              grid: { color: '#f1f5f9' },
+            },
+          },
+        },
+      });
+
     }
 
     init().catch(err => {

@@ -36,6 +36,8 @@ mofc-extract = "mofc_financials.data_extraction.extract_990:main"
 mofc-extract-detail = "mofc_financials.data_extraction.extract_990_detail:main"
 mofc-pipeline = "mofc_financials.data_extraction.validate:main"
 mofc-validate = "mofc_financials.data_extraction.validate:validate_main"
+mofc-extract-audit = "mofc_financials.data_extraction.extract_audit:main"
+mofc-compute-efficiency = "mofc_financials.data_extraction.compute_efficiency:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -938,6 +938,307 @@ def format_report(
 
 
 # ---------------------------------------------------------------------------
+# Audit data cross-checks
+# ---------------------------------------------------------------------------
+
+# Tolerance for food-expense cross-check (audit vs 990)
+_AUDIT_FOOD_TOLERANCE = 0.10  # 10%
+# Tolerance for inventory continuity (ending vs next year's beginning)
+_INVENTORY_CONTINUITY_TOLERANCE = 10  # absolute pounds
+
+
+def _read_audit_csv(output_dir: Path) -> list[dict[str, str]]:
+    """Read the audit food-volume CSV, preferring manual-edits.
+
+    Parameters
+    ----------
+    output_dir : Path
+        Directory containing processed CSVs.
+
+    Returns
+    -------
+    list[dict[str, str]]
+        Audit rows, or empty list if file not found.
+    """
+    for name in ("mofc_audit_food_volume_manual_edits.csv", "mofc_audit_food_volume.csv"):
+        p = output_dir / name
+        if p.exists():
+            with open(p, newline="") as f:
+                return list(csv.DictReader(f))
+    return []
+
+
+def check_audit_inventory_math(
+    audit_rows: list[dict[str, str]],
+) -> list[ValidationIssue]:
+    """Verify inventory balance equations for each year.
+
+    For donated food: begin + received - |disbursed| - |discarded| = ending.
+    For purchased food: begin + purchases - |distributed| = ending.
+
+    Parameters
+    ----------
+    audit_rows : list[dict[str, str]]
+        Rows from the audit food-volume CSV.
+
+    Returns
+    -------
+    list[ValidationIssue]
+        Issues found.
+    """
+    issues: list[ValidationIssue] = []
+    for row in audit_rows:
+        year = row.get("form_year", "?")
+
+        # Donated food balance
+        begin = _to_int(row.get("donated_lbs_beginning_inv", ""))
+        received = _to_int(row.get("donated_lbs_received_total", ""))
+        disbursed = _to_int(row.get("donated_lbs_disbursed_total", ""))
+        discarded = _to_int(row.get("donated_lbs_discarded", ""))
+        ending = _to_int(row.get("donated_lbs_ending_inv", ""))
+
+        if all(v is not None for v in (begin, received, disbursed, discarded, ending)):
+            # disbursed and discarded are negative in CSV
+            computed = (begin or 0) + (received or 0) + (disbursed or 0) + (discarded or 0)
+            diff = abs(computed - (ending or 0))
+            if diff > _INVENTORY_CONTINUITY_TOLERANCE:
+                issues.append(
+                    ValidationIssue(
+                        year,
+                        "ERROR",
+                        "audit_inventory",
+                        f"Donated food balance mismatch: "
+                        f"{begin:,}+{received:,}+({disbursed:,})+({discarded:,})"
+                        f"={computed:,} vs ending={ending:,} (diff={diff:,})",
+                    )
+                )
+
+        # Purchased food balance
+        p_begin = _to_int(row.get("purchased_lbs_beginning_inv", ""))
+        p_purchases = _to_int(row.get("purchased_lbs_purchases", ""))
+        p_distributed = _to_int(row.get("purchased_lbs_distributed", ""))
+        p_ending = _to_int(row.get("purchased_lbs_ending_inv", ""))
+
+        if all(v is not None for v in (p_begin, p_purchases, p_distributed, p_ending)):
+            p_computed = (p_begin or 0) + (p_purchases or 0) + (p_distributed or 0)
+            p_diff = abs(p_computed - (p_ending or 0))
+            if p_diff > _INVENTORY_CONTINUITY_TOLERANCE:
+                issues.append(
+                    ValidationIssue(
+                        year,
+                        "ERROR",
+                        "audit_inventory",
+                        f"Purchased food balance mismatch: "
+                        f"{p_begin:,}+{p_purchases:,}+({p_distributed:,})"
+                        f"={p_computed:,} vs ending={p_ending:,} (diff={p_diff:,})",
+                    )
+                )
+
+    return issues
+
+
+def check_audit_continuity(
+    audit_rows: list[dict[str, str]],
+) -> list[ValidationIssue]:
+    """Verify inventory continuity across consecutive years.
+
+    Each year's ending inventory should equal the next year's beginning.
+
+    Parameters
+    ----------
+    audit_rows : list[dict[str, str]]
+        Rows from the audit food-volume CSV, sorted by form_year.
+
+    Returns
+    -------
+    list[ValidationIssue]
+        Issues found.
+    """
+    issues: list[ValidationIssue] = []
+    sorted_rows = sorted(audit_rows, key=lambda r: r.get("form_year", ""))
+
+    for i in range(len(sorted_rows) - 1):
+        curr = sorted_rows[i]
+        nxt = sorted_rows[i + 1]
+        curr_year = curr.get("form_year", "?")
+        nxt_year = nxt.get("form_year", "?")
+
+        for prefix, label in [("donated", "Donated"), ("purchased", "Purchased")]:
+            ending = _to_int(curr.get(f"{prefix}_lbs_ending_inv", ""))
+            beginning = _to_int(nxt.get(f"{prefix}_lbs_beginning_inv", ""))
+
+            if ending is not None and beginning is not None:
+                diff = abs(ending - beginning)
+                if diff > _INVENTORY_CONTINUITY_TOLERANCE:
+                    issues.append(
+                        ValidationIssue(
+                            f"{curr_year}-{nxt_year}",
+                            "WARNING",
+                            "audit_continuity",
+                            f"{label} ending inv FY{curr_year}={ending:,} "
+                            f"≠ beginning inv FY{nxt_year}={beginning:,} "
+                            f"(diff={diff:,})",
+                        )
+                    )
+
+    return issues
+
+
+def check_audit_food_expense(
+    audit_rows: list[dict[str, str]],
+    expense_by_year: dict[str, list[dict[str, str]]],
+) -> list[ValidationIssue]:
+    """Cross-check 990 line 24a food expense against audit totals.
+
+    The 990 food expense should approximate the sum of donated food
+    disbursed (dollar value) + purchased food distributed (dollar value).
+
+    Parameters
+    ----------
+    audit_rows : list[dict[str, str]]
+        Rows from the audit food-volume CSV.
+    expense_by_year : dict[str, list[dict[str, str]]]
+        Expense detail rows keyed by form_year.
+
+    Returns
+    -------
+    list[ValidationIssue]
+        Issues found.
+    """
+    issues: list[ValidationIssue] = []
+
+    for row in audit_rows:
+        year = row.get("form_year", "?")
+        exp_rows = expense_by_year.get(year, [])
+
+        # Find line 24a in expense detail
+        food_990: int | None = None
+        for er in exp_rows:
+            if er.get("line_number", "").strip() == "24a":
+                food_990 = _to_int(er.get("total", ""))
+                break
+
+        if food_990 is None:
+            continue
+
+        # Sum audit food values (dollar values)
+        donated_val = abs(_to_int(row.get("donated_val_disbursed_total", "")) or 0)
+        purchased_val = abs(_to_int(row.get("purchased_val_distributed", "")) or 0)
+        audit_total = donated_val + purchased_val
+
+        if audit_total == 0:
+            continue
+
+        diff = _pct_diff(food_990, audit_total)
+        if diff > _AUDIT_FOOD_TOLERANCE:
+            issues.append(
+                ValidationIssue(
+                    year,
+                    "WARNING",
+                    "audit_cross_check",
+                    f"990 food expense (24a)={food_990:,} vs audit "
+                    f"food total={audit_total:,} ({diff:.1%} difference)",
+                )
+            )
+
+    return issues
+
+
+def check_audit_valuation_rate(
+    audit_rows: list[dict[str, str]],
+) -> list[ValidationIssue]:
+    """Check that stated valuation rate is consistent with actual values.
+
+    Computes donated_val_received / donated_lbs_received and compares
+    against the stated valuation_rate.
+
+    Parameters
+    ----------
+    audit_rows : list[dict[str, str]]
+        Rows from the audit food-volume CSV.
+
+    Returns
+    -------
+    list[ValidationIssue]
+        Issues found.
+    """
+    issues: list[ValidationIssue] = []
+
+    for row in audit_rows:
+        year = row.get("form_year", "?")
+        stated_rate_str = row.get("valuation_rate", "")
+        if not stated_rate_str:
+            continue
+
+        try:
+            stated_rate = float(stated_rate_str)
+        except ValueError:
+            continue
+
+        lbs = _to_int(row.get("donated_lbs_received_total", ""))
+        val = _to_int(row.get("donated_val_received_total", ""))
+
+        if not lbs or not val:
+            continue
+
+        actual_rate = val / lbs
+        diff = abs(actual_rate - stated_rate) / stated_rate
+        if diff > 0.15:  # 15% tolerance (channel mix causes variation)
+            issues.append(
+                ValidationIssue(
+                    year,
+                    "WARNING",
+                    "audit_valuation",
+                    f"Computed valuation rate ${actual_rate:.2f}/lb "
+                    f"vs stated ${stated_rate:.2f}/lb ({diff:.1%} difference)",
+                )
+            )
+
+    return issues
+
+
+def run_audit_validation(
+    output_dir: Path,
+) -> list[ValidationIssue]:
+    """Run all audit-data cross-checks.
+
+    Parameters
+    ----------
+    output_dir : Path
+        Directory containing processed CSVs.
+
+    Returns
+    -------
+    list[ValidationIssue]
+        All audit validation issues.
+    """
+    audit_rows = _read_audit_csv(output_dir)
+    if not audit_rows:
+        return []
+
+    # Load expense detail for food-expense cross-check
+    exp_by_year: dict[str, list[dict[str, str]]] = {}
+    for name in (
+        "mofc_990_expense_detail_manual_edits.csv",
+        "mofc_990_expense_detail.csv",
+    ):
+        p = output_dir / name
+        if p.exists():
+            with open(p, newline="") as f:
+                for r in csv.DictReader(f):
+                    exp_by_year.setdefault(r["form_year"], []).append(r)
+            break
+
+    issues: list[ValidationIssue] = []
+    issues.extend(check_audit_inventory_math(audit_rows))
+    issues.extend(check_audit_continuity(audit_rows))
+    issues.extend(check_audit_food_expense(audit_rows, exp_by_year))
+    issues.extend(check_audit_valuation_rate(audit_rows))
+
+    return issues
+
+
+# ---------------------------------------------------------------------------
 # Pipeline orchestration
 # ---------------------------------------------------------------------------
 
@@ -955,7 +1256,13 @@ def run_pipeline(
     3. Extract Part IX expense detail via ``extract_expense_detail``
     4. Cross-validate detail totals against summary values
 
-    Writes three CSV files and a validation report to *output_dir*.
+    Optionally also:
+
+    5. Extract audit data from ``MOFC-Audit-*.pdf`` (if present)
+    6. Compute efficiency metrics (if audit CSV exists)
+    7. Run audit cross-checks
+
+    Writes CSV files and a validation report to *output_dir*.
 
     Parameters
     ----------
@@ -1025,6 +1332,31 @@ def run_pipeline(
 
     exp_path = output_dir / "mofc_990_expense_detail.csv"
     _write_csv(exp_path, EXPENSE_CSV_FIELDS, all_expense_rows)
+
+    # Stage 2: Audit extraction (optional — skipped if no audit PDFs)
+    audit_pdfs = sorted(data_dir.glob("MOFC-Audit-*.pdf"))
+    if audit_pdfs:
+        from mofc_financials.data_extraction.extract_audit import main as audit_main
+
+        print("\n--- Audit extraction ---", file=sys.stderr)
+        audit_main()
+    else:
+        print("\nNo audit PDFs found; skipping audit extraction.", file=sys.stderr)
+
+    # Stage 3: Compute efficiency metrics (if both 990 + audit CSVs exist)
+    audit_csv = output_dir / "mofc_audit_food_volume.csv"
+    if audit_csv.exists():
+        from mofc_financials.data_extraction.compute_efficiency import main as eff_main
+
+        print("\n--- Efficiency metrics ---", file=sys.stderr)
+        eff_main()
+    else:
+        print("No audit CSV found; skipping efficiency metrics.", file=sys.stderr)
+
+    # Audit cross-checks
+    audit_issues = run_audit_validation(output_dir)
+    if audit_issues:
+        all_issues["audit"] = audit_issues
 
     # Step 4: Write report
     output_files = [str(summary_path), str(rev_path), str(exp_path)]
@@ -1119,6 +1451,12 @@ def run_validation_only(output_dir: Path) -> dict[str, list[ValidationIssue]]:
         *check_label_consistency(revenue_by_year, expenses_by_year),
         *check_line_presence_consistency(revenue_by_year, expenses_by_year),
     ]
+
+    # Audit cross-checks (if audit CSV exists)
+    audit_issues = run_audit_validation(output_dir)
+    if audit_issues:
+        audit_key = "audit"
+        all_issues[audit_key] = audit_issues
 
     output_files = [str(summary_path), str(rev_path), str(exp_path)]
     report = format_report(all_issues, revenue_counts, expense_counts, output_files)

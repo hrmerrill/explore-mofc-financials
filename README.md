@@ -6,6 +6,8 @@ MOFC posts their financials [here](https://mofc.org/financials/). I'm interested
 
 MOFC posts image-based PDF scans of their IRS 990 forms. These are stored in `data/raw/` and processed via OCR into structured CSV data in `data/processed/`.
 
+MOFC also publishes annual audit reports (`MOFC-Audit-*.pdf` in `data/raw/`). These are text-based PDFs (no OCR needed) containing donated and purchased food inventory data used for efficiency metrics.
+
 ## Getting Started
 
 ### Prerequisites
@@ -48,7 +50,8 @@ mofc-pipeline
 This scans all `MOFC-990-*.pdf` files in `data/raw/`, extracts Part I Summary
 fields and Parts VIII/IX line-item detail via OCR, writes three CSVs to
 `data/processed/`, and produces a validation report flagging values that may
-need correction.
+need correction. If `MOFC-Audit-*.pdf` files are present, it also extracts
+food volume data and computes efficiency metrics.
 
 **Stage 2 — Manual correction and re-validation (iterate until clean)**
 
@@ -72,12 +75,24 @@ mofc-validate
 to the original extraction CSVs) and overwrites the validation report. Repeat
 until the report shows no errors.
 
+**Audit Data Extraction (standalone)**
+
+```bash
+# Extract food volume data from audit PDFs
+mofc-extract-audit
+
+# Compute efficiency metrics (requires both 990 + audit CSVs)
+mofc-compute-efficiency
+```
+
 ## Dashboard
 
 An interactive financial dashboard lives at `docs/index.html`. It visualizes
-the extracted data across four tabs (Overall, Revenue, Expenses, About) using
-[Chart.js](https://www.chartjs.org/). The dashboard loads the
-`*_manual_edits.csv` files from `docs/data/` via relative `fetch()` calls, so
+the extracted data across five tabs (Overall, Revenue, Expenses, About,
+Efficiency) using [Chart.js](https://www.chartjs.org/). The Efficiency tab
+shows cost-per-meal, food volume by source, waste rate, and labor productivity
+metrics derived from annual audit reports. The dashboard loads CSV files from
+`docs/data/` via relative `fetch()` calls, so
 it must be served over HTTP — opening the HTML file directly will fail due to
 browser CORS restrictions on `file://` URLs.
 
