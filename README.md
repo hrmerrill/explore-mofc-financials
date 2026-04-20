@@ -54,6 +54,8 @@ need correction.
 
 ```bash
 # Copy the extraction output to editable files (only needed once)
+cp data/processed/mofc_990_financials.csv \
+   data/processed/mofc_990_financials_manual_edits.csv
 cp data/processed/mofc_990_revenue_detail.csv \
    data/processed/mofc_990_revenue_detail_manual_edits.csv
 cp data/processed/mofc_990_expense_detail.csv \
@@ -70,6 +72,45 @@ mofc-validate
 to the original extraction CSVs) and overwrites the validation report. Repeat
 until the report shows no errors.
 
+## Dashboard
+
+An interactive financial dashboard lives at `docs/index.html`. It visualizes
+the extracted data across four tabs (Overall, Revenue, Expenses, About) using
+[Chart.js](https://www.chartjs.org/). The dashboard loads the
+`*_manual_edits.csv` files from `docs/data/` via relative `fetch()` calls, so
+it must be served over HTTP — opening the HTML file directly will fail due to
+browser CORS restrictions on `file://` URLs.
+
+### Previewing Locally
+
+Always preview the dashboard locally before pushing changes:
+
+```bash
+make serve          # starts a local server at http://localhost:8000
+```
+
+Open <http://localhost:8000> and verify:
+
+1. All four tabs render without errors (check the browser console).
+2. KPI cards show reasonable values with correct YoY percentages.
+3. Charts display data for every year (2019–2023).
+4. Grouped/stacked toggles and noncash/food toggles work.
+
+Stop the server with `Ctrl+C` when done.
+
+### Updating Dashboard Data
+
+After Stage 2 validation passes with no errors, copy the final CSVs into
+`docs/data/` so the dashboard picks them up:
+
+```bash
+cp data/processed/mofc_990_financials_manual_edits.csv    docs/data/
+cp data/processed/mofc_990_revenue_detail_manual_edits.csv docs/data/
+cp data/processed/mofc_990_expense_detail_manual_edits.csv docs/data/
+```
+
+Then preview locally (`make serve`) before committing or deploying.
+
 ## For Developers
 
 ### Project Structure
@@ -77,6 +118,7 @@ until the report shows no errors.
 ```
 explore-mofc-financials/
 ├── pyproject.toml              # Package metadata, deps, tool config
+├── Makefile                    # Dev shortcuts (format, test, serve, etc.)
 ├── src/
 │   └── mofc_financials/        # Main package (src-layout)
 │       ├── __init__.py
@@ -90,19 +132,45 @@ explore-mofc-financials/
 ├── data/
 │   ├── raw/                    # Source PDFs (not committed)
 │   └── processed/              # Extracted and manually edited CSVs
+├── docs/
+│   ├── index.html              # Interactive financial dashboard
+│   └── data/                   # CSV data served to the dashboard
 └── .github/
-    └── copilot-instructions.md # AI assistant conventions
+    ├── copilot-instructions.md # AI assistant conventions
+    └── workflows/ci.yml        # CI: lint, typecheck, test
+```
+
+### CLI Commands
+
+| Command | Description |
+|---------|-------------|
+| `mofc-pipeline` | Full extract + validate pipeline (Stage 1) |
+| `mofc-validate` | Re-validate edited CSVs without OCR (Stage 2) |
+| `mofc-extract` | Extract Part I Summary only |
+| `mofc-extract-detail` | Extract Parts VIII/IX detail only |
+
+### Makefile Targets
+
+```bash
+make format       # isort + black
+make test         # pytest
+make typecheck    # mypy src/
+make doccheck     # interrogate src/ (100% docstring coverage)
+make lint         # format + typecheck + doccheck
+make check-all    # all checks without modifying files
+make serve        # local dashboard preview at http://localhost:8000
 ```
 
 ### Running Tests
 
 ```bash
-pytest
+pytest                          # unit tests (fast, no OCR needed)
+pytest -m smoke --tb=short -v   # smoke tests (slow, requires Tesseract + PDFs)
 ```
 
-### Code Formatting
+### Code Quality
 
-This project uses [Black](https://black.readthedocs.io/), [isort](https://pycqa.github.io/isort/), and [mypy](https://mypy.readthedocs.io/) for consistent formatting and type checking:
+This project uses [Black](https://black.readthedocs.io/), [isort](https://pycqa.github.io/isort/), [mypy](https://mypy.readthedocs.io/), and [interrogate](https://interrogate.readthedocs.io/) for formatting, type checking, and docstring coverage:
 
 ```bash
 # Format all Python files
@@ -113,9 +181,18 @@ black -l 100 src/ tests/
 black --check src/ tests/
 isort --check-only src/ tests/
 
-# Type checking
+# Type checking (strict mode)
 mypy src/
+
+# Docstring coverage (100% required)
+interrogate src/
 ```
+
+### CI
+
+GitHub Actions runs lint, typecheck, and test jobs on every push and PR to
+`main`. All three must pass before merging. Tests run on Python 3.12, 3.13,
+and 3.14.
 
 ### Adding New Analysis
 
@@ -124,3 +201,38 @@ Future modules for statistical analysis or visualization should be added under `
 ```bash
 pip install -e ".[analysis]"  # adds pandas, matplotlib, seaborn
 ```
+
+### Dashboard Development Notes
+
+The dashboard (`docs/index.html`) is a single-file HTML/JS app with no build
+step. A few things to know when editing it:
+
+- **`file://` URLs won't work.** The dashboard loads CSVs via `fetch()`, which
+  browsers block on `file://` due to CORS. Always use `make serve`.
+
+- **Food pass-through inflates revenue and expenses equally.** Noncash food
+  donations (revenue line 1g, ~$94–107M/yr) and the corresponding food expense
+  (expense line 24a) represent roughly the same food valued on intake vs.
+  distribution. The "Include Food" toggle on the Overall tab controls whether
+  these amounts are included in the Revenue vs. Expenses and Surplus / Deficit
+  charts. It defaults to **on** (food included) and updates both charts
+  simultaneously because they share the same underlying totals.
+
+- **Noncash ≠ food expense exactly.** Line 1g (noncash contributions received)
+  and line 24a (food distributed) can differ due to timing, spoilage, or
+  non-food noncash items. This means the Surplus / Deficit chart may shift
+  slightly when toggling food — this is expected, not a bug.
+
+- **Functional chart splits food from program services.** The Functional
+  Expense Allocation chart separates "Food (Program)" from "Program Services"
+  by subtracting line 24a's `program_service` value from line 25's total
+  program services. Food is 100% program service in all years (2019–2023). If
+  future 990s allocate food across other functional columns, the subtraction
+  logic in the `FUNCTIONAL` data block will need updating.
+
+- **Toggle patterns differ by chart type.** The Revenue Detail and Expense
+  Detail charts use an add/remove-dataset pattern (the `wireToggle` helper)
+  that appends a new bar group. The Overall food toggle uses a data-swap
+  pattern that replaces existing dataset arrays in-place. Both call
+  `chart.update()` after mutation — skipping this call is a common Chart.js
+  mistake that results in stale visuals.

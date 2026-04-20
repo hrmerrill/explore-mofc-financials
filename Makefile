@@ -1,4 +1,4 @@
-.PHONY: format install test typecheck doccheck lint check-all run-all
+.PHONY: format install test typecheck doccheck lint check-all run-all serve
 
 format:
 	isort src/ tests/
@@ -26,3 +26,7 @@ check-all:
 	pytest --tb=short -q
 
 run-all: format install test typecheck doccheck
+
+serve:
+	@echo "Dashboard: http://localhost:8000"
+	cd docs && python -m http.server 8000 & sleep 1 && open http://localhost:8000

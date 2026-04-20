@@ -321,7 +321,7 @@
 
   <header>
     <h1>Mid-Ohio Food Collective Financial Dashboard</h1>
-    <p>IRS Form 990 Data · 2019–2023</p>
+    <p>IRS Form 990 Data · Fiscal Years 2020–2024 (July–June)</p>
     <p style="font-size:.75rem; color:#94a3b8; margin-top:.35rem;">
       Community project — data may contain errors.
       <a href="#" onclick="event.preventDefault(); document.querySelector('[data-tab=about]').click();"
@@ -345,6 +345,11 @@
         <div class="chart-card">
           <div class="chart-header">
             <h3>Revenue vs. Expenses</h3>
+            <label class="switch-group">
+              <input type="checkbox" id="overall-food-toggle" checked>
+              <span class="switch-track"></span>
+              Include Food
+            </label>
           </div>
           <canvas id="chart-rev-exp"></canvas>
         </div>
@@ -389,7 +394,7 @@
 
     <!-- ═══════════════ REVENUE ═══════════════ -->
     <section id="revenue" class="tab-content">
-      <p class="section-note">Noncash (food) contributions excluded. See Overall tab for full revenue picture.</p>
+      <p class="section-note">Noncash (food) contributions available via toggle.</p>
       <div class="kpi-row" id="kpi-revenue"></div>
       <div class="chart-grid">
         <div class="chart-card full-width">
@@ -443,16 +448,26 @@
       <div class="chart-card" style="max-width: 720px; margin: 0 auto; min-height: auto;">
         <h2 style="font-size: 1.25rem; margin-bottom: 1rem;">About This Dashboard</h2>
         <p style="margin-bottom: 1rem; color: var(--text-muted);">
-          This dashboard was built to visualize the financial data published by the 
+          This dashboard was built to visualize the financial data published by the
           <a href="https://mofc.org" target="_blank" rel="noopener" style="color: var(--accent);">Mid-Ohio Food
             Collective</a>.
         </p>
         <h3 style="font-size: 1rem; margin-bottom: .5rem;">Why</h3>
         <p style="margin-bottom: 1rem; color: var(--text-muted);">
           I was curious where I could contribute. I hypothesized I could save costs by, e.g., creating an open-source
-          route optimization tool, but I did not know if this was the most impactful contribution I could make.
-          To identify where I can make the biggest impact, I needed to first understand this data.
-          (Also, I had a free weekend and an AI budget, and this kind of thing is fun for me.)
+          route optimization tool to reduce transportation costs, but I did not know if this was the most impactful
+          contribution I could make. To identify where I can make the biggest impact, I needed to first understand
+          this data.
+        </p>
+        <h3 style="font-size: 1rem; margin-bottom: .5rem;">What's Missing?</h3>
+        <p style="margin-bottom: 1rem; color: var(--text-muted);">
+          <strong>Impact.</strong> MOFC provides food to help <i>people</i>. Reporting meals served per dollar and
+          people served per dollar would more accurately reflect MOFC's impact than a simple financial report like
+          this one.
+        </p>
+        <p style="margin-bottom: 1rem; color: var(--text-muted);">
+          <strong>Granularity.</strong> MOFC serves many communities, and visualizing community-specific impact may
+          reveal opportunities that are not visible at the overall level.
         </p>
         <h3 style="font-size: 1rem; margin-bottom: .5rem;">Who</h3>
         <p style="margin-bottom: 1rem; color: var(--text-muted);">
@@ -465,8 +480,9 @@
           All data is extracted from MOFC's publicly available
           <a href="https://mofc.org/financials/" target="_blank" rel="noopener" style="color: var(--accent);">IRS Form
             990 filings</a>
-          (tax years 2019–2023). PDFs were processed via OCR and manually verified against the source documents. There
-          still may be errors! If so, please let me know.
+          (fiscal years 2020–2024). Each fiscal year runs July 1 – June 30; for example, "FY 2024"
+          covers July 2023 through June 2024. PDFs were processed via OCR and manually verified against the source
+          documents. There still may be errors! If so, please let me know.
         </p>
         <h3 style="font-size: 1rem; margin-bottom: .5rem;">Feedback &amp; Corrections</h3>
         <p style="color: var(--text-muted);">
@@ -490,61 +506,191 @@
 
   <script>
     /* ════════════════════════════════════════════════════════════════
-       DATA
+       CSV PARSER
        ════════════════════════════════════════════════════════════════ */
-    const YEARS = [2019, 2020, 2021, 2022, 2023];
+    function parseCSVLine(line) {
+      const result = [];
+      let current = '';
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (inQuotes) {
+          if (ch === '"') {
+            if (i + 1 < line.length && line[i + 1] === '"') {
+              current += '"';
+              i++;
+            } else {
+              inQuotes = false;
+            }
+          } else {
+            current += ch;
+          }
+        } else if (ch === '"') {
+          inQuotes = true;
+        } else if (ch === ',') {
+          result.push(current);
+          current = '';
+        } else {
+          current += ch;
+        }
+      }
+      result.push(current);
+      return result;
+    }
 
-    const SUMMARY = {
-      totalRevenue: [124406705, 150715504, 115170580, 121763988, 133634324],
-      totalExpenses: [115824878, 123732505, 118899557, 124787958, 134475329],
-      netIncome: [8581827, 26982999, -3728977, -3023970, -841005],
-      salaries: [10747872, 14401579, 14467535, 14941672, 15863890],
-      totalAssets: [40992168, 66739553, 66822693, 64158489, 61859448],
-      totalLiabilities: [3434922, 2199308, 6011425, 6371191, 4913155],
-      netAssets: [37557246, 64540245, 60811268, 57787298, 56946293],
-      noncash: [91962060, 87075393, 83015952, 85157621, 99879112],
-      food: [97809886, 98975790, 94074670, 98804335, 107214002],
-    };
-    SUMMARY.cashRevenue = SUMMARY.totalRevenue.map((r, i) => r - SUMMARY.noncash[i]);
-    SUMMARY.otherExpenses = SUMMARY.totalExpenses.map((e, i) => e - SUMMARY.food[i] - SUMMARY.salaries[i]);
+    function parseCSV(text) {
+      const lines = text.replace(/\r/g, '').trim().split('\n');
+      const headers = parseCSVLine(lines[0]);
+      return lines.slice(1).map(line => {
+        const values = parseCSVLine(line);
+        const row = {};
+        headers.forEach((h, i) => { row[h] = values[i] || ''; });
+        return row;
+      });
+    }
 
-    const FUNCTIONAL = {
-      program: [108617597, 114982997, 109038870, 115034064, 124038575],
-      management: [5027883, 5627572, 6413813, 6362388, 6846503],
-      fundraising: [2179398, 3121936, 3446874, 3391506, 3590251],
-    };
+    function num(val) {
+      if (val === '' || val == null) return 0;
+      const n = Number(val);
+      return isNaN(n) ? 0 : n;
+    }
 
-    /* Revenue line items (excluding noncash 1g and subtotals) */
-    const REVENUE_CATS = {
-      'Cash Contributions': [24024052, 48108246, 25063082, 23791663, 20550573],
-      'Government Grants': [4472152, 11524742, 6060559, 6675034, 6221821],
-      'Shared Maint. Fees': [2518729, 1100245, 2243697, 3699382, 3466879],
-      'Investment Income': [165887, 1527379, -2272381, 1381386, 2263725],
-      'Program Earned Income': [660417, 680835, 812534, 850916, 896062],
-      'Rental & Other Income': [603408, 698664, 247137, 128659, 268310],
-      'Fundraising Events': [0, 0, 0, 79327, 87842],
-    };
+    /* ════════════════════════════════════════════════════════════════
+       DATA LOADER
+       ════════════════════════════════════════════════════════════════ */
+    async function loadData() {
+      const [financialsText, revenueText, expenseText] = await Promise.all([
+        fetch('data/mofc_990_financials_manual_edits.csv').then(r => r.text()),
+        fetch('data/mofc_990_revenue_detail_manual_edits.csv').then(r => r.text()),
+        fetch('data/mofc_990_expense_detail_manual_edits.csv').then(r => r.text()),
+      ]);
 
-    /* Expense line items (excluding salary lines 5/7/8/9/10, food 24a, total 25)
-       Normalized by label across years (lines 24b-d swap labels).
-       Grouped into logical categories for readability. */
-    const EXPENSE_CATS = {
-      'Facilities & Infrastructure': [2392705, 2501177, 2458417, 2946391, 3578558],
-      'Professional Services': [1719801, 4229473, 4115175, 3561913, 2718955],
-      'Program Operations': [1581640, 1734831, 1907957, 2426630, 2770945],
-      'Administrative': [854553, 1204530, 1116949, 1114135, 1530941],
-      'Marketing & Fundraising': [302164, 315278, 744704, 802743, 277028],
-      'Other': [416257, 369837, 14150, 190139, 521010],
-    };
-    /* Breakdown within each group (for tooltips) */
-    const EXPENSE_GROUP_DETAIL = {
-      'Facilities & Infrastructure': 'Occupancy + Depreciation + Insurance',
-      'Professional Services': 'Prof. Fundraising + Other Fees + Accounting + Legal',
-      'Program Operations': 'Service Delivery + Transportation',
-      'Administrative': 'Office + IT + Travel + Conferences',
-      'Marketing & Fundraising': 'Advertising + Fundraising Expense',
-      'Other': 'All other expenses',
-    };
+      const financials = parseCSV(financialsText);
+      const revenueDetail = parseCSV(revenueText);
+      const expenseDetail = parseCSV(expenseText);
+
+      const YEARS = financials.map(r => Number(r.form_year)).sort((a, b) => a - b);
+      const FISCAL_YEARS = YEARS.map(y => y + 1);
+
+      function byYear(rows, field) {
+        return YEARS.map(y => {
+          const row = rows.find(r => Number(r.form_year) === y);
+          return row ? num(row[field]) : 0;
+        });
+      }
+
+      /* ── SUMMARY ── */
+      const SUMMARY = {
+        totalRevenue: byYear(financials, 'total_revenue'),
+        totalExpenses: byYear(financials, 'total_expenses'),
+        netIncome: byYear(financials, 'revenue_less_expenses'),
+        salaries: byYear(financials, 'salaries_and_compensation'),
+        totalAssets: byYear(financials, 'total_assets_eoy'),
+        totalLiabilities: byYear(financials, 'total_liabilities_eoy'),
+        netAssets: byYear(financials, 'net_assets_eoy'),
+      };
+
+      const noncashRows = revenueDetail.filter(r => r.line_number === '1g');
+      SUMMARY.noncash = byYear(noncashRows, 'total');
+
+      const foodRows = expenseDetail.filter(r => r.line_number === '24a');
+      SUMMARY.food = byYear(foodRows, 'total');
+
+      SUMMARY.cashRevenue = SUMMARY.totalRevenue.map((r, i) => r - SUMMARY.noncash[i]);
+      SUMMARY.cashExpenses = SUMMARY.totalExpenses.map((e, i) => e - SUMMARY.food[i]);
+      SUMMARY.cashNetIncome = SUMMARY.cashRevenue.map((r, i) => r - SUMMARY.cashExpenses[i]);
+      SUMMARY.otherExpenses = SUMMARY.totalExpenses.map((e, i) => e - SUMMARY.food[i] - SUMMARY.salaries[i]);
+
+      /* ── FUNCTIONAL (from line 25 in expense detail) ── */
+      const funcRows = expenseDetail.filter(r => r.line_number === '25');
+      const foodFuncRows = expenseDetail.filter(r => r.line_number === '24a');
+      const foodProgram = byYear(foodFuncRows, 'program_service');
+      const FUNCTIONAL = {
+        foodProgram,
+        program: byYear(funcRows, 'program_service').map((v, i) => v - foodProgram[i]),
+        management: byYear(funcRows, 'management_and_general'),
+        fundraising: byYear(funcRows, 'fundraising'),
+      };
+
+      /* ── REVENUE CATEGORIES ── */
+      function revLine(ln) {
+        return revenueDetail.filter(r => r.line_number === ln);
+      }
+
+      const line1f = byYear(revLine('1f'), 'total');
+      const line1g = SUMMARY.noncash;
+
+      const REVENUE_CATS = {
+        'Cash Contributions': line1f.map((v, i) => v - line1g[i]),
+        'Government Grants': byYear(revLine('1e'), 'total'),
+        'Shared Maint. Fees': byYear(revLine('2a'), 'total'),
+        'Investment Income': byYear(revLine('3'), 'total'),
+        'Program Earned Income': byYear(revLine('2b'), 'total'),
+        'Rental & Other Income': byYear(revLine('11a'), 'total'),
+        'Fundraising Events': byYear(revLine('1c'), 'total'),
+      };
+
+      /* ── EXPENSE CATEGORIES ──
+         Lines 24b-d swap labels across years; match by label for those. */
+      function expLine(ln) {
+        return expenseDetail.filter(r => r.line_number === ln);
+      }
+
+      function expByLabel(labelSubstring) {
+        return YEARS.map(y => {
+          const rows = expenseDetail.filter(r =>
+            Number(r.form_year) === y &&
+            ['24b', '24c', '24d'].includes(r.line_number) &&
+            r.label.toLowerCase().includes(labelSubstring.toLowerCase())
+          );
+          return rows.reduce((sum, r) => sum + num(r.total), 0);
+        });
+      }
+
+      function sumArrays(...arrays) {
+        return arrays[0].map((_, i) => arrays.reduce((sum, arr) => sum + (arr[i] || 0), 0));
+      }
+
+      const EXPENSE_CATS = {
+        'Facilities & Infrastructure': sumArrays(
+          byYear(expLine('16'), 'total'),
+          byYear(expLine('22'), 'total'),
+          byYear(expLine('23'), 'total')
+        ),
+        'Professional Services': sumArrays(
+          byYear(expLine('11b'), 'total'),
+          byYear(expLine('11c'), 'total'),
+          byYear(expLine('11e'), 'total'),
+          byYear(expLine('11g'), 'total')
+        ),
+        'Program Operations': sumArrays(
+          expByLabel('service delivery'),
+          expByLabel('transportation')
+        ),
+        'Administrative': sumArrays(
+          byYear(expLine('13'), 'total'),
+          byYear(expLine('14'), 'total'),
+          byYear(expLine('17'), 'total'),
+          byYear(expLine('19'), 'total')
+        ),
+        'Marketing & Fundraising': sumArrays(
+          byYear(expLine('12'), 'total'),
+          expByLabel('fundraising')
+        ),
+        'Other': byYear(expLine('24e'), 'total'),
+      };
+
+      const EXPENSE_GROUP_DETAIL = {
+        'Facilities & Infrastructure': 'Occupancy + Depreciation + Insurance',
+        'Professional Services': 'Prof. Fundraising + Other Fees + Accounting + Legal',
+        'Program Operations': 'Service Delivery + Transportation',
+        'Administrative': 'Office + IT + Travel + Conferences',
+        'Marketing & Fundraising': 'Advertising + Fundraising Expense',
+        'Other': 'All other expenses',
+      };
+
+      return { YEARS, FISCAL_YEARS, SUMMARY, FUNCTIONAL, REVENUE_CATS, EXPENSE_CATS, EXPENSE_GROUP_DETAIL };
+    }
 
     /* ════════════════════════════════════════════════════════════════
        UTILITIES
@@ -645,258 +791,299 @@
     }
 
     /* ════════════════════════════════════════════════════════════════
-       KPI CARDS
+       INITIALIZE DASHBOARD
        ════════════════════════════════════════════════════════════════ */
-    const li = YEARS.length - 1; // latest index
+    async function init() {
+      const { YEARS, FISCAL_YEARS, SUMMARY, FUNCTIONAL, REVENUE_CATS, EXPENSE_CATS, EXPENSE_GROUP_DETAIL } = await loadData();
+      const li = YEARS.length - 1;
+      const latestYear = 'FY ' + FISCAL_YEARS[li];
+      const largestRevCat = Object.entries(REVENUE_CATS).reduce((max, e) => e[1][li] > max[1][li] ? e : max);
+      const largestExpCat = Object.entries(EXPENSE_CATS).reduce((max, e) => e[1][li] > max[1][li] ? e : max);
 
-    renderKpi('kpi-overall', [
-      {
-        label: '2023 Total Revenue', value: abbrev(SUMMARY.totalRevenue[li]),
-        sub: pctChange(SUMMARY.totalRevenue[li], SUMMARY.totalRevenue[li - 1])
-      },
-      {
-        label: '2023 Total Expenses', value: abbrev(SUMMARY.totalExpenses[li]),
-        sub: pctChange(SUMMARY.totalExpenses[li], SUMMARY.totalExpenses[li - 1])
-      },
-      {
-        label: '2023 Net Income', value: abbrev(SUMMARY.netIncome[li]),
-        cls: SUMMARY.netIncome[li] >= 0 ? 'positive' : 'negative',
-        sub: pctChange(SUMMARY.netIncome[li], SUMMARY.netIncome[li - 1])
-      },
-      {
-        label: '2023 Net Assets', value: abbrev(SUMMARY.netAssets[li]),
-        sub: pctChange(SUMMARY.netAssets[li], SUMMARY.netAssets[li - 1])
-      },
-    ]);
-
-    const cashRevLatest = SUMMARY.cashRevenue[li];
-    renderKpi('kpi-revenue', [
-      {
-        label: '2023 Cash Revenue', value: abbrev(cashRevLatest),
-        sub: pctChange(cashRevLatest, SUMMARY.cashRevenue[li - 1])
-      },
-      {
-        label: 'Largest Source', value: 'Cash Contributions',
-        sub: abbrev(REVENUE_CATS['Cash Contributions'][li])
-      },
-      {
-        label: '5-Year Avg Cash Rev.', value: abbrev(
-          SUMMARY.cashRevenue.reduce((a, b) => a + b, 0) / YEARS.length)
-      },
-    ]);
-
-    const opexLatest = SUMMARY.otherExpenses[li];
-    renderKpi('kpi-expenses', [
-      {
-        label: '2023 Operating Expenses', value: abbrev(opexLatest),
-        sub: 'Excl. salaries & food'
-      },
-      {
-        label: 'Largest Category', value: 'Facilities',
-        sub: abbrev(EXPENSE_CATS['Facilities & Infrastructure'][li])
-      },
-      {
-        label: '5-Year Avg Operating', value: abbrev(
-          SUMMARY.otherExpenses.reduce((a, b) => a + b, 0) / YEARS.length)
-      },
-    ]);
-
-    /* ════════════════════════════════════════════════════════════════
-       CHART: Revenue vs. Expenses (Overall)
-       ════════════════════════════════════════════════════════════════ */
-    charts['chart-rev-exp'] = new Chart(document.getElementById('chart-rev-exp'), {
-      type: 'bar',
-      data: {
-        labels: YEARS.map(String),
-        datasets: [
-          { label: 'Total Revenue', data: SUMMARY.totalRevenue, backgroundColor: '#2563eb', borderRadius: 3 },
-          { label: 'Total Expenses', data: SUMMARY.totalExpenses, backgroundColor: '#f97316', borderRadius: 3 },
-        ],
-      },
-      options: baseOpts(),
-    });
-
-    /* ════════════════════════════════════════════════════════════════
-       CHART: Surplus / Deficit (Overall)
-       ════════════════════════════════════════════════════════════════ */
-    charts['chart-net-income'] = new Chart(document.getElementById('chart-net-income'), {
-      type: 'bar',
-      data: {
-        labels: YEARS.map(String),
-        datasets: [{
-          label: 'Net Income',
-          data: SUMMARY.netIncome,
-          backgroundColor: SUMMARY.netIncome.map(v => v >= 0 ? '#059669' : '#dc2626'),
-          borderRadius: 3,
-        }],
-      },
-      options: baseOpts({
-        plugins: {
-          legend: { display: false },
-          tooltip: { callbacks: { label: ctx => `Net Income: ${fmt.format(ctx.parsed.y)}` } },
+      renderKpi('kpi-overall', [
+        {
+          label: latestYear + ' Total Revenue', value: abbrev(SUMMARY.totalRevenue[li]),
+          sub: pctChange(SUMMARY.totalRevenue[li], SUMMARY.totalRevenue[li - 1])
         },
-      }),
-    });
+        {
+          label: latestYear + ' Total Expenses', value: abbrev(SUMMARY.totalExpenses[li]),
+          sub: pctChange(SUMMARY.totalExpenses[li], SUMMARY.totalExpenses[li - 1])
+        },
+        {
+          label: latestYear + ' Net Income', value: abbrev(SUMMARY.netIncome[li]),
+          cls: SUMMARY.netIncome[li] >= 0 ? 'positive' : 'negative',
+          sub: pctChange(SUMMARY.netIncome[li], SUMMARY.netIncome[li - 1])
+        },
+        {
+          label: latestYear + ' Net Assets', value: abbrev(SUMMARY.netAssets[li]),
+          sub: pctChange(SUMMARY.netAssets[li], SUMMARY.netAssets[li - 1])
+        },
+      ]);
 
-    /* ════════════════════════════════════════════════════════════════
-       CHART: Revenue Composition (Overall)
-       ════════════════════════════════════════════════════════════════ */
-    charts['chart-rev-comp'] = new Chart(document.getElementById('chart-rev-comp'), {
-      type: 'bar',
-      data: {
-        labels: YEARS.map(String),
-        datasets: [
-          { label: 'Cash Revenue', data: SUMMARY.cashRevenue, backgroundColor: '#2563eb', borderRadius: 3 },
-          { label: 'Noncash (Food) Donations', data: SUMMARY.noncash, backgroundColor: '#93c5fd', borderRadius: 3 },
-        ],
-      },
-      options: baseOpts(),
-    });
+      const cashRevLatest = SUMMARY.cashRevenue[li];
+      renderKpi('kpi-revenue', [
+        {
+          label: latestYear + ' Cash Revenue', value: abbrev(cashRevLatest),
+          sub: pctChange(cashRevLatest, SUMMARY.cashRevenue[li - 1])
+        },
+        {
+          label: 'Largest Source', value: largestRevCat[0],
+          sub: abbrev(largestRevCat[1][li])
+        },
+        {
+          label: YEARS.length + '-Year Avg Cash Rev.', value: abbrev(
+            SUMMARY.cashRevenue.reduce((a, b) => a + b, 0) / YEARS.length)
+        },
+      ]);
 
-    /* ════════════════════════════════════════════════════════════════
-       CHART: Expense Composition (Overall)
-       ════════════════════════════════════════════════════════════════ */
-    charts['chart-exp-comp'] = new Chart(document.getElementById('chart-exp-comp'), {
-      type: 'bar',
-      data: {
-        labels: YEARS.map(String),
-        datasets: [
-          { label: 'Salaries & Benefits', data: SUMMARY.salaries, backgroundColor: '#f97316', borderRadius: 3 },
-          { label: 'Food (Monetary Value)', data: SUMMARY.food, backgroundColor: '#fbbf24', borderRadius: 3 },
-          { label: 'Other Operating', data: SUMMARY.otherExpenses, backgroundColor: '#a3a3a3', borderRadius: 3 },
-        ],
-      },
-      options: baseOpts(),
-    });
+      const opexLatest = SUMMARY.otherExpenses[li];
+      renderKpi('kpi-expenses', [
+        {
+          label: latestYear + ' Operating Expenses', value: abbrev(opexLatest),
+          sub: 'Excl. salaries & food'
+        },
+        {
+          label: 'Largest Category', value: largestExpCat[0],
+          sub: abbrev(largestExpCat[1][li])
+        },
+        {
+          label: YEARS.length + '-Year Avg Operating', value: abbrev(
+            SUMMARY.otherExpenses.reduce((a, b) => a + b, 0) / YEARS.length)
+        },
+      ]);
 
-    /* ════════════════════════════════════════════════════════════════
-       CHART: Functional Expense Allocation (Overall)
-       ════════════════════════════════════════════════════════════════ */
-    charts['chart-functional'] = new Chart(document.getElementById('chart-functional'), {
-      type: 'bar',
-      data: {
-        labels: YEARS.map(String),
-        datasets: [
-          { label: 'Program Services', data: FUNCTIONAL.program, backgroundColor: '#2563eb', borderRadius: 3 },
-          { label: 'Management & General', data: FUNCTIONAL.management, backgroundColor: '#f97316', borderRadius: 3 },
-          { label: 'Fundraising', data: FUNCTIONAL.fundraising, backgroundColor: '#a855f7', borderRadius: 3 },
-        ],
-      },
-      options: baseOpts({
-        maintainAspectRatio: true, aspectRatio: detailAspect(), scales: {
-          x: { stacked: true, grid: { display: false } },
-          y: { stacked: true, ticks: { callback: v => abbrev(v) }, grid: { color: '#f1f5f9' } },
-        }
-      }),
-    });
+      /* ════════════════════════════════════════════════════════════════
+         CHART: Revenue vs. Expenses (Overall)
+         ════════════════════════════════════════════════════════════════ */
+      charts['chart-rev-exp'] = new Chart(document.getElementById('chart-rev-exp'), {
+        type: 'bar',
+        data: {
+          labels: FISCAL_YEARS.map(y => 'FY ' + y),
+          datasets: [
+            { label: 'Revenue', data: SUMMARY.totalRevenue, backgroundColor: '#2563eb', borderRadius: 3 },
+            { label: 'Expenses', data: SUMMARY.totalExpenses, backgroundColor: '#f97316', borderRadius: 3 },
+          ],
+        },
+        options: baseOpts(),
+      });
 
-    /* ════════════════════════════════════════════════════════════════
-       CHART: Revenue Detail
-       ════════════════════════════════════════════════════════════════ */
-    charts['chart-rev-detail'] = new Chart(document.getElementById('chart-rev-detail'), {
-      type: 'bar',
-      data: {
-        labels: YEARS.map(String),
-        datasets: makeDatasets(REVENUE_CATS, REVENUE_COLORS),
-      },
-      options: baseOpts({ aspectRatio: detailAspect() }),
-    });
+      /* ════════════════════════════════════════════════════════════════
+         CHART: Surplus / Deficit (Overall)
+         ════════════════════════════════════════════════════════════════ */
+      charts['chart-net-income'] = new Chart(document.getElementById('chart-net-income'), {
+        type: 'bar',
+        data: {
+          labels: FISCAL_YEARS.map(y => 'FY ' + y),
+          datasets: [{
+            label: 'Net Income',
+            data: SUMMARY.netIncome,
+            backgroundColor: SUMMARY.netIncome.map(v => v >= 0 ? '#059669' : '#dc2626'),
+            borderRadius: 3,
+          }],
+        },
+        options: baseOpts({
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: ctx => `Net Income: ${fmt.format(ctx.parsed.y)}` } },
+          },
+        }),
+      });
 
-    /* ════════════════════════════════════════════════════════════════
-       CHART: Expense Detail
-       ════════════════════════════════════════════════════════════════ */
-    charts['chart-exp-detail'] = new Chart(document.getElementById('chart-exp-detail'), {
-      type: 'bar',
-      data: {
-        labels: YEARS.map(String),
-        datasets: makeDatasets(EXPENSE_CATS, EXPENSE_COLORS),
-      },
-      options: baseOpts({
-        aspectRatio: detailAspect(),
-        plugins: {
-          legend: { position: 'top', labels: { boxWidth: 12, padding: 10, font: { size: 11 } } },
-          tooltip: {
-            callbacks: {
-              label: ctx => `${ctx.dataset.label}: ${fmt.format(ctx.parsed.y)}`,
-              afterLabel: ctx => EXPENSE_GROUP_DETAIL[ctx.dataset.label] || '',
+      /* ════════════════════════════════════════════════════════════════
+         CHART: Revenue Composition (Overall)
+         ════════════════════════════════════════════════════════════════ */
+      charts['chart-rev-comp'] = new Chart(document.getElementById('chart-rev-comp'), {
+        type: 'bar',
+        data: {
+          labels: FISCAL_YEARS.map(y => 'FY ' + y),
+          datasets: [
+            { label: 'Cash Revenue', data: SUMMARY.cashRevenue, backgroundColor: '#2563eb', borderRadius: 3 },
+            { label: 'Noncash (Food) Donations', data: SUMMARY.noncash, backgroundColor: '#93c5fd', borderRadius: 3 },
+          ],
+        },
+        options: baseOpts(),
+      });
+
+      /* ════════════════════════════════════════════════════════════════
+         CHART: Expense Composition (Overall)
+         ════════════════════════════════════════════════════════════════ */
+      charts['chart-exp-comp'] = new Chart(document.getElementById('chart-exp-comp'), {
+        type: 'bar',
+        data: {
+          labels: FISCAL_YEARS.map(y => 'FY ' + y),
+          datasets: [
+            { label: 'Salaries & Benefits', data: SUMMARY.salaries, backgroundColor: '#f97316', borderRadius: 3 },
+            { label: 'Food (Monetary Value)', data: SUMMARY.food, backgroundColor: '#fbbf24', borderRadius: 3 },
+            { label: 'Other Operating', data: SUMMARY.otherExpenses, backgroundColor: '#a3a3a3', borderRadius: 3 },
+          ],
+        },
+        options: baseOpts(),
+      });
+
+      /* ════════════════════════════════════════════════════════════════
+         CHART: Functional Expense Allocation (Overall)
+         ════════════════════════════════════════════════════════════════ */
+      charts['chart-functional'] = new Chart(document.getElementById('chart-functional'), {
+        type: 'bar',
+        data: {
+          labels: FISCAL_YEARS.map(y => 'FY ' + y),
+          datasets: [
+            { label: 'Food (Program)', data: FUNCTIONAL.foodProgram, backgroundColor: '#fbbf24', borderRadius: 3 },
+            { label: 'Program Services', data: FUNCTIONAL.program, backgroundColor: '#2563eb', borderRadius: 3 },
+            { label: 'Management & General', data: FUNCTIONAL.management, backgroundColor: '#f97316', borderRadius: 3 },
+            { label: 'Fundraising', data: FUNCTIONAL.fundraising, backgroundColor: '#a855f7', borderRadius: 3 },
+          ],
+        },
+        options: baseOpts({
+          maintainAspectRatio: true, aspectRatio: detailAspect(), scales: {
+            x: { stacked: true, grid: { display: false } },
+            y: { stacked: true, ticks: { callback: v => abbrev(v) }, grid: { color: '#f1f5f9' } },
+          }
+        }),
+      });
+
+      /* ════════════════════════════════════════════════════════════════
+         CHART: Revenue Detail
+         ════════════════════════════════════════════════════════════════ */
+      charts['chart-rev-detail'] = new Chart(document.getElementById('chart-rev-detail'), {
+        type: 'bar',
+        data: {
+          labels: FISCAL_YEARS.map(y => 'FY ' + y),
+          datasets: makeDatasets(REVENUE_CATS, REVENUE_COLORS),
+        },
+        options: baseOpts({ aspectRatio: detailAspect() }),
+      });
+
+      /* ════════════════════════════════════════════════════════════════
+         CHART: Expense Detail
+         ════════════════════════════════════════════════════════════════ */
+      charts['chart-exp-detail'] = new Chart(document.getElementById('chart-exp-detail'), {
+        type: 'bar',
+        data: {
+          labels: FISCAL_YEARS.map(y => 'FY ' + y),
+          datasets: makeDatasets(EXPENSE_CATS, EXPENSE_COLORS),
+        },
+        options: baseOpts({
+          aspectRatio: detailAspect(),
+          plugins: {
+            legend: { position: 'top', labels: { boxWidth: 12, padding: 10, font: { size: 11 } } },
+            tooltip: {
+              callbacks: {
+                label: ctx => `${ctx.dataset.label}: ${fmt.format(ctx.parsed.y)}`,
+                afterLabel: ctx => EXPENSE_GROUP_DETAIL[ctx.dataset.label] || '',
+              },
             },
           },
-        },
-      }),
-    });
-
-    /* ════════════════════════════════════════════════════════════════
-       TAB SWITCHING
-       ════════════════════════════════════════════════════════════════ */
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-        document.querySelectorAll('.tab-content').forEach(s => s.classList.remove('active'));
-        btn.classList.add('active');
-        document.getElementById(btn.dataset.tab).classList.add('active');
-        /* Trigger resize so Chart.js reflows into newly-visible containers */
-        window.dispatchEvent(new Event('resize'));
+        }),
       });
-    });
 
-    /* Update chart aspect ratios on viewport resize */
-    const DETAIL_CHARTS = ['chart-rev-detail', 'chart-exp-detail', 'chart-functional'];
-    const BASE_CHARTS = ['chart-rev-exp', 'chart-net-income', 'chart-rev-comp', 'chart-exp-comp'];
-    window.addEventListener('resize', () => {
-      const dar = detailAspect();
-      DETAIL_CHARTS.forEach(id => {
-        if (charts[id]) { charts[id].options.aspectRatio = dar; charts[id].update('none'); }
-      });
-      const bar = baseAspect();
-      BASE_CHARTS.forEach(id => {
-        if (charts[id]) { charts[id].options.aspectRatio = bar; charts[id].update('none'); }
-      });
-    });
-
-    /* ════════════════════════════════════════════════════════════════
-       STACKED / GROUPED TOGGLES
-       ════════════════════════════════════════════════════════════════ */
-    document.querySelectorAll('.toggle-group').forEach(group => {
-      group.querySelectorAll('.toggle-btn').forEach(btn => {
+      /* ════════════════════════════════════════════════════════════════
+         TAB SWITCHING
+         ════════════════════════════════════════════════════════════════ */
+      document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-          group.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+          document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+          document.querySelectorAll('.tab-content').forEach(s => s.classList.remove('active'));
           btn.classList.add('active');
-          setStacked(btn.dataset.chart, btn.dataset.mode === 'stacked');
+          document.getElementById(btn.dataset.tab).classList.add('active');
+          /* Trigger resize so Chart.js reflows into newly-visible containers */
+          window.dispatchEvent(new Event('resize'));
         });
       });
-    });
 
-    /* ════════════════════════════════════════════════════════════════
-       NONCASH (FOOD) TOGGLE — Revenue Detail
-       ════════════════════════════════════════════════════════════════ */
-    const NONCASH_DATASET = {
-      label: 'Noncash (Food) Donations',
-      data: SUMMARY.noncash,
-      backgroundColor: '#93c5fd',
-      borderRadius: 3,
-    };
-
-    function wireToggle(checkboxId, chartId, dataset) {
-      document.getElementById(checkboxId).addEventListener('change', function () {
-        const chart = charts[chartId];
-        if (this.checked) {
-          chart.data.datasets.push(dataset);
-        } else {
-          chart.data.datasets = chart.data.datasets.filter(ds => ds.label !== dataset.label);
-        }
-        chart.update();
+      /* Update chart aspect ratios on viewport resize */
+      const DETAIL_CHARTS = ['chart-rev-detail', 'chart-exp-detail', 'chart-functional'];
+      const BASE_CHARTS = ['chart-rev-exp', 'chart-net-income', 'chart-rev-comp', 'chart-exp-comp'];
+      window.addEventListener('resize', () => {
+        const dar = detailAspect();
+        DETAIL_CHARTS.forEach(id => {
+          if (charts[id]) { charts[id].options.aspectRatio = dar; charts[id].update('none'); }
+        });
+        const bar = baseAspect();
+        BASE_CHARTS.forEach(id => {
+          if (charts[id]) { charts[id].options.aspectRatio = bar; charts[id].update('none'); }
+        });
       });
+
+      /* ════════════════════════════════════════════════════════════════
+         STACKED / GROUPED TOGGLES
+         ════════════════════════════════════════════════════════════════ */
+      document.querySelectorAll('.toggle-group').forEach(group => {
+        group.querySelectorAll('.toggle-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            group.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            setStacked(btn.dataset.chart, btn.dataset.mode === 'stacked');
+          });
+        });
+      });
+
+      /* ════════════════════════════════════════════════════════════════
+         NONCASH (FOOD) TOGGLE — Revenue Detail
+         ════════════════════════════════════════════════════════════════ */
+      const NONCASH_DATASET = {
+        label: 'Noncash (Food) Donations',
+        data: SUMMARY.noncash,
+        backgroundColor: '#93c5fd',
+        borderRadius: 3,
+      };
+
+      function wireToggle(checkboxId, chartId, dataset) {
+        document.getElementById(checkboxId).addEventListener('change', function () {
+          const chart = charts[chartId];
+          if (this.checked) {
+            chart.data.datasets.push(dataset);
+          } else {
+            chart.data.datasets = chart.data.datasets.filter(ds => ds.label !== dataset.label);
+          }
+          chart.update();
+        });
+      }
+
+      wireToggle('noncash-toggle', 'chart-rev-detail', NONCASH_DATASET);
+
+      /* ════════════════════════════════════════════════════════════════
+         INCLUDE FOOD TOGGLE — Revenue vs. Expenses & Surplus / Deficit
+         Noncash food donations (line 1g) inflate revenue while the
+         corresponding food expense (line 24a) inflates expenses by a
+         similar ~$94–107M.  Toggling "Include Food" swaps both charts
+         between cash-only and full 990 totals.
+         ════════════════════════════════════════════════════════════════ */
+      document.getElementById('overall-food-toggle').addEventListener('change', function () {
+        const revExp = charts['chart-rev-exp'];
+        const netInc = charts['chart-net-income'];
+        if (this.checked) {
+          revExp.data.datasets[0].data = SUMMARY.totalRevenue;
+          revExp.data.datasets[1].data = SUMMARY.totalExpenses;
+          netInc.data.datasets[0].data = SUMMARY.netIncome;
+          netInc.data.datasets[0].backgroundColor =
+            SUMMARY.netIncome.map(v => v >= 0 ? '#059669' : '#dc2626');
+        } else {
+          revExp.data.datasets[0].data = SUMMARY.cashRevenue;
+          revExp.data.datasets[1].data = SUMMARY.cashExpenses;
+          netInc.data.datasets[0].data = SUMMARY.cashNetIncome;
+          netInc.data.datasets[0].backgroundColor =
+            SUMMARY.cashNetIncome.map(v => v >= 0 ? '#059669' : '#dc2626');
+        }
+        revExp.update();
+        netInc.update();
+      });
+
+      const FOOD_DATASET = {
+        label: 'Food (Monetary Value)',
+        data: SUMMARY.food,
+        backgroundColor: '#fbbf24',
+        borderRadius: 3,
+      };
+      wireToggle('food-toggle', 'chart-exp-detail', FOOD_DATASET);
     }
 
-    wireToggle('noncash-toggle', 'chart-rev-detail', NONCASH_DATASET);
-
-    const FOOD_DATASET = {
-      label: 'Food (Monetary Value)',
-      data: SUMMARY.food,
-      backgroundColor: '#fbbf24',
-      borderRadius: 3,
-    };
-    wireToggle('food-toggle', 'chart-exp-detail', FOOD_DATASET);
+    init().catch(err => {
+      console.error('Failed to load dashboard data:', err);
+      document.querySelector('main').innerHTML =
+        '<p style="text-align:center;padding:2rem;color:#dc2626;">' +
+        'Failed to load financial data. Ensure CSV files are available in data/.</p>';
+    });
   </script>
 
 </body>
