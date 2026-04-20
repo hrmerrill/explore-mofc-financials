@@ -492,8 +492,8 @@
                   Show Food (Monetary Value)
                 </label>
                 <div class="toggle-group">
-                  <button class="toggle-btn active" data-chart="chart-exp-detail" data-mode="grouped">Grouped</button>
-                  <button class="toggle-btn" data-chart="chart-exp-detail" data-mode="stacked">Stacked</button>
+                  <button class="toggle-btn" data-chart="chart-exp-detail" data-mode="grouped">Grouped</button>
+                  <button class="toggle-btn active" data-chart="chart-exp-detail" data-mode="stacked">Stacked</button>
                 </div>
               </div>
             </div>
@@ -1102,6 +1102,10 @@
         },
         options: baseOpts({
           aspectRatio: detailAspect(),
+          scales: {
+            x: { stacked: true, grid: { display: false } },
+            y: { stacked: true, ticks: { callback: v => abbrev(v) }, grid: { color: '#f1f5f9' } },
+          },
           plugins: {
             legend: { position: 'top', labels: { boxWidth: 12, padding: 10, font: { size: 11 } } },
             tooltip: {
@@ -1251,7 +1255,7 @@
 
       renderKpi('kpi-efficiency', [
         {
-          label: 'Avg Meals per Dollar',
+          label: 'Meals Served per Dollar',
           value: avgMealsPerDollar.toFixed(2),
           sub: EFFICIENCY.mealsPerDollar.filter(v => v != null && v > 0).length + '-year average'
         },
