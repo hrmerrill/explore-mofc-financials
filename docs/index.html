@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MOFC Financial Dashboard</title>
+  <title>Mid-Ohio Food Collective Financial Explorer</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <style>
     :root {
@@ -428,10 +428,10 @@
 <body>
 
   <header>
-    <h1>Mid-Ohio Food Collective Dashboard</h1>
-    <p>IRS Form 990 &amp; Annual Audit Data · Fiscal Years 2019–2024 (July–June)</p>
+    <h1>Mid-Ohio Food Collective Financial Explorer</h1>
+    <!-- <p>IRS Form 990 &amp; Annual Audit Data · Fiscal Years 2019–2024 (July–June)</p> -->
     <p style="font-size:.75rem; color:#94a3b8; margin-top:.35rem;">
-      Community project — data may contain errors.
+      Not an official MOFC publication. Data may contain errors.
       <a href="#" onclick="event.preventDefault(); document.querySelector('[data-tab=about]').click();"
         style="color:#60a5fa; text-decoration:underline;">Corrections &amp; feedback welcome.</a>
     </p>
@@ -606,14 +606,11 @@
         </p>
         <h3 style="font-size: 1rem; margin-bottom: .5rem;">Why</h3>
         <p style="margin-bottom: 1rem; color: var(--text-muted);">
-          I was curious where I could contribute. I hypothesized I could save costs by, e.g., creating an open-source
-          route optimization tool to reduce transportation costs, but I did not know if this was the most impactful
-          contribution I could make. To identify where I can make the biggest impact, I needed to first understand
-          this data.
+          Entirely out of curiosity.
         </p>
         <h3 style="font-size: 1rem; margin-bottom: .5rem;">What's Missing?</h3>
         <p style="margin-bottom: 1rem; color: var(--text-muted);">
-          <strong>Granularity.</strong> MOFC serves many communities, and visualizing community-specific impact may
+          <strong>Granularity.</strong> For example, MOFC serves many communities, and visualizing community-specific impact may
           reveal opportunities that are not visible at the overall level.
         </p>
         <h3 style="font-size: 1rem; margin-bottom: .5rem;">Who</h3>
@@ -626,7 +623,7 @@
         <p style="margin-bottom: 1rem; color: var(--text-muted);">
           All data is extracted from MOFC's publicly available
           <a href="https://mofc.org/financials/" target="_blank" rel="noopener" style="color: var(--accent);">IRS Form
-            990 filings</a> and annual audit reports
+            990 filings and annual audit reports</a>
           (fiscal years 2019–2024). Each fiscal year runs July 1 – June 30; for example, "FY 2024"
           covers July 2023 through June 2024. 990 PDFs were processed via OCR and manually verified;
           audit PDFs are text-based and extracted programmatically. There still may be errors! If so, please let me
@@ -646,7 +643,8 @@
   </main>
 
   <footer>
-    Not affiliated with MOFC — data extracted from IRS Form 990 filings via OCR, not verified by MOFC, and may contain
+    Not affiliated with MOFC — data extracted from audit findings and IRS Form 990 filings, not verified by MOFC, and
+    may contain
     errors.
     <a href="https://github.com/hrmerrill/explore-mofc-financials/issues" target="_blank" rel="noopener">Corrections
       welcome</a> ·
