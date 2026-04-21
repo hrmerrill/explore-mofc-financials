@@ -205,7 +205,7 @@
       box-shadow: var(--shadow);
       padding: 1.25rem;
       min-height: 340px;
-      overflow: hidden;
+      overflow: visible;
       max-width: 100%;
     }
 
@@ -422,6 +422,69 @@
       font-weight: 700;
       color: var(--accent);
     }
+
+    /* ── Tooltips ── */
+    .tooltip-wrap {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: .3rem;
+    }
+
+    .tooltip-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--border);
+      color: var(--text-muted);
+      font-size: .55rem;
+      font-weight: 700;
+      font-style: italic;
+      cursor: help;
+      flex-shrink: 0;
+    }
+
+    .tooltip-text {
+      visibility: hidden;
+      opacity: 0;
+      position: absolute;
+      z-index: 100;
+      bottom: calc(100% + 8px);
+      left: 50%;
+      transform: translateX(-50%);
+      min-width: 220px;
+      max-width: 300px;
+      padding: .5rem .75rem;
+      background: var(--header-bg);
+      color: var(--header-fg);
+      font-size: .75rem;
+      font-weight: 400;
+      line-height: 1.4;
+      border-radius: 6px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, .15);
+      pointer-events: none;
+      transition: opacity .15s, visibility .15s;
+      text-transform: none;
+      letter-spacing: normal;
+    }
+
+    .tooltip-text::after {
+      content: '';
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      border: 5px solid transparent;
+      border-top-color: var(--header-bg);
+    }
+
+    .tooltip-wrap:hover .tooltip-text {
+      visibility: visible;
+      opacity: 1;
+    }
   </style>
 </head>
 
@@ -461,7 +524,9 @@
         <div class="chart-grid">
           <div class="chart-card">
             <div class="chart-header">
-              <h3>Revenue vs. Expenses</h3>
+              <h3><span class="tooltip-wrap">Revenue vs. Expenses<span class="tooltip-icon">i</span><span
+                    class="tooltip-text">Total revenue and total expenses from IRS Form 990 Part I. Toggle 'Include
+                    Food' to switch between full 990 totals and cash-only figures.</span></span></h3>
               <label class="switch-group">
                 <input type="checkbox" id="overall-food-toggle" checked>
                 <span class="switch-track"></span>
@@ -472,13 +537,17 @@
           </div>
           <div class="chart-card">
             <div class="chart-header">
-              <h3>Surplus / Deficit</h3>
+              <h3><span class="tooltip-wrap">Surplus / Deficit<span class="tooltip-icon">i</span><span
+                    class="tooltip-text">Revenue less expenses from Form 990 Part I (line 19). Positive values indicate
+                    a surplus; negative values indicate a deficit.</span></span></h3>
             </div>
             <canvas id="chart-net-income"></canvas>
           </div>
           <div class="chart-card">
             <div class="chart-header">
-              <h3>Revenue Composition</h3>
+              <h3><span class="tooltip-wrap">Revenue Composition<span class="tooltip-icon">i</span><span
+                    class="tooltip-text">Total revenue split into cash and noncash (donated food). Noncash food is
+                    valued at Feeding America per-pound rates.</span></span></h3>
               <div class="toggle-group">
                 <button class="toggle-btn active" data-chart="chart-rev-comp" data-mode="grouped">Grouped</button>
                 <button class="toggle-btn" data-chart="chart-rev-comp" data-mode="stacked">Stacked</button>
@@ -488,7 +557,9 @@
           </div>
           <div class="chart-card">
             <div class="chart-header">
-              <h3>Expense Composition</h3>
+              <h3><span class="tooltip-wrap">Expense Composition<span class="tooltip-icon">i</span><span
+                    class="tooltip-text">Total expenses broken into salaries &amp; benefits, monetary value of
+                    distributed food, and other operating costs.</span></span></h3>
               <div class="toggle-group">
                 <button class="toggle-btn active" data-chart="chart-exp-comp" data-mode="grouped">Grouped</button>
                 <button class="toggle-btn" data-chart="chart-exp-comp" data-mode="stacked">Stacked</button>
@@ -498,7 +569,9 @@
           </div>
           <div class="chart-card full-width">
             <div class="chart-header">
-              <h3>Functional Expense Allocation</h3>
+              <h3><span class="tooltip-wrap">Functional Expense Allocation<span class="tooltip-icon">i</span><span
+                    class="tooltip-text">How total expenses are allocated across program services, management &amp;
+                    general, and fundraising per Form 990 Part IX.</span></span></h3>
               <div class="toggle-group">
                 <button class="toggle-btn" data-chart="chart-functional" data-mode="grouped">Grouped</button>
                 <button class="toggle-btn active" data-chart="chart-functional" data-mode="stacked">Stacked</button>
@@ -511,12 +584,14 @@
 
       <!-- ── Revenue subtab ── -->
       <div id="subtab-revenue" class="subtab-content">
-        <p class="section-note">Noncash (food) contributions available via toggle.</p>
         <div class="kpi-row" id="kpi-revenue"></div>
         <div class="chart-grid">
           <div class="chart-card full-width">
             <div class="chart-header">
-              <h3>Cash Revenue by Category</h3>
+              <h3><span class="tooltip-wrap">Cash Revenue by Category<span class="tooltip-icon">i</span><span
+                    class="tooltip-text">Revenue by source from Form 990 Part VIII, excluding noncash food donations
+                    unless toggled. Categories include cash contributions, government grants, program fees, and
+                    investment income.</span></span></h3>
               <div class="chart-controls">
                 <label class="switch-group">
                   <input type="checkbox" id="noncash-toggle">
@@ -536,13 +611,16 @@
 
       <!-- ── Expenses subtab ── -->
       <div id="subtab-expenses" class="subtab-content">
-        <p class="section-note">Salaries &amp; benefits excluded. Noncash food value (~$94–107M) available via toggle.
+        <p class="section-note" id="note-expenses">Salaries &amp; benefits excluded. Noncash food value available via
+          toggle.
         </p>
         <div class="kpi-row" id="kpi-expenses"></div>
         <div class="chart-grid">
           <div class="chart-card full-width">
             <div class="chart-header">
-              <h3>Operating Expenses by Category</h3>
+              <h3><span class="tooltip-wrap">Operating Expenses by Category<span class="tooltip-icon">i</span><span
+                    class="tooltip-text">Expense line items from Form 990 Part IX, grouped into functional categories.
+                    Excludes salaries &amp; benefits. Toggle to include food (monetary value).</span></span></h3>
               <div class="chart-controls">
                 <label class="switch-group">
                   <input type="checkbox" id="food-toggle">
@@ -563,25 +641,33 @@
 
     <!-- ═══════════════ EFFICIENCY ═══════════════ -->
     <section id="efficiency" class="tab-content active">
-      <p class="section-note">Efficiency metrics derived from annual audit reports and 990 filings. Audit data covers FY
-        2019–2024.</p>
+      <p class="section-note" id="note-efficiency">Efficiency metrics derived from annual audit reports and 990 filings.
+      </p>
       <div class="kpi-row" id="kpi-efficiency"></div>
       <div class="chart-grid">
         <div class="chart-card">
           <div class="chart-header">
-            <h3>Meals Served per Dollar</h3>
+            <h3><span class="tooltip-wrap">Meals Served per Dollar<span class="tooltip-icon">i</span><span
+                  class="tooltip-text">Meals purchasable per $1 of food spending, derived from MOFC audit purchase cost
+                  data and Feeding America's 1.2 meals/lb standard.</span></span></h3>
           </div>
           <canvas id="chart-cost-per-meal"></canvas>
         </div>
         <div class="chart-card">
           <div class="chart-header">
-            <h3>Waste Rate</h3>
+            <h3><span class="tooltip-wrap">Waste Rate<span class="tooltip-icon">i</span><span
+                  class="tooltip-text">Percentage of available donated food discarded each year. Calculated as lbs
+                  discarded &divide; (lbs received + beginning inventory), from MOFC annual audit reports.</span></span>
+            </h3>
           </div>
           <canvas id="chart-waste-rate"></canvas>
         </div>
         <div class="chart-card full-width">
           <div class="chart-header">
-            <h3>Food Volume by Source</h3>
+            <h3><span class="tooltip-wrap">Food Volume by Source<span class="tooltip-icon">i</span><span
+                  class="tooltip-text">Pounds of food distributed by source: TEFAP (federal), CSFP (federal), Ohio Food
+                  Purchase Program, Industry Surplus (retail/manufacturer donations), and Purchased food. From MOFC
+                  annual audit reports.</span></span></h3>
           </div>
           <canvas id="chart-food-volume"></canvas>
         </div>
@@ -610,7 +696,8 @@
         </p>
         <h3 style="font-size: 1rem; margin-bottom: .5rem;">What's Missing?</h3>
         <p style="margin-bottom: 1rem; color: var(--text-muted);">
-          <strong>Granularity.</strong> For example, MOFC serves many communities, and visualizing community-specific impact may
+          <strong>Granularity.</strong> For example, MOFC serves many communities, and visualizing community-specific
+          impact may
           reveal opportunities that are not visible at the overall level.
         </p>
         <h3 style="font-size: 1rem; margin-bottom: .5rem;">Who</h3>
@@ -889,7 +976,7 @@
       const el = document.getElementById(containerId);
       el.innerHTML = cards.map(c => `
     <div class="kpi-card">
-      <span class="kpi-label">${c.label}</span>
+      <span class="kpi-label"><span class="tooltip-wrap">${c.label}${c.tooltip ? `<span class="tooltip-icon">i</span><span class="tooltip-text">${c.tooltip}</span>` : ''}</span></span>
       <span class="kpi-value ${c.cls || ''}">${c.value}</span>
       ${c.sub ? `<span class="kpi-sub">${c.sub}</span>` : ''}
       ${c.extra || ''}
@@ -1000,23 +1087,28 @@
           label: 'Cost/Meal',
           value: latestCostPerMeal ? '$' + latestCostPerMeal.toFixed(2) : 'N/A',
           sub: latestMpdYear,
+          tooltip: 'Cash cost to provide one meal, based on MOFC\u2019s food purchase price per pound \u00f7 1.2 meals/lb (Feeding America standard).',
         },
         {
           label: 'Avg Total Revenue', value: abbrev(avgRevenue),
-          sub: '5-year average',
+          sub: YEARS.length + '-year average',
+          tooltip: 'Average annual total revenue from IRS Form 990 Part I, including noncash food donations valued at Feeding America rates.',
         },
         {
           label: 'Avg Total Expenses', value: abbrev(avgExpenses),
-          sub: '5-year average',
+          sub: YEARS.length + '-year average',
+          tooltip: 'Average annual total expenses from IRS Form 990 Part I, including the monetary value of distributed food.',
         },
         {
           label: 'Avg Net Income', value: abbrev(avgNetIncome),
-          sub: '5-year average',
+          sub: YEARS.length + '-year average',
           cls: avgNetIncome >= 0 ? 'positive' : 'negative',
+          tooltip: 'Average annual surplus or deficit (total revenue minus total expenses) from IRS Form 990 Part I.',
         },
         {
           label: 'Avg Net Assets', value: abbrev(avgNetAssets),
-          sub: '5-year average',
+          sub: YEARS.length + '-year average',
+          tooltip: 'Average year-end net assets (total assets minus total liabilities) from IRS Form 990 Part I.',
         },
       ]);
 
@@ -1024,15 +1116,18 @@
       renderKpi('kpi-revenue', [
         {
           label: latestYear + ' Cash Revenue', value: abbrev(cashRevLatest),
-          sub: pctChange(cashRevLatest, SUMMARY.cashRevenue[li - 1])
+          sub: pctChange(cashRevLatest, SUMMARY.cashRevenue[li - 1]),
+          tooltip: 'Total revenue minus noncash food donations (Form 990 line 1g). Includes cash contributions, grants, program service revenue, and investment income.',
         },
         {
           label: 'Largest Source', value: largestRevCat[0],
-          sub: abbrev(largestRevCat[1][li])
+          sub: abbrev(largestRevCat[1][li]),
+          tooltip: 'The cash revenue category with the highest dollar amount in the most recent fiscal year.',
         },
         {
           label: YEARS.length + '-Year Avg Cash Revenue', value: abbrev(
-            SUMMARY.cashRevenue.reduce((a, b) => a + b, 0) / YEARS.length)
+            SUMMARY.cashRevenue.reduce((a, b) => a + b, 0) / YEARS.length),
+          tooltip: 'Average annual cash revenue (total revenue less noncash food donations) across all reported fiscal years.',
         },
       ]);
 
@@ -1040,15 +1135,18 @@
       renderKpi('kpi-expenses', [
         {
           label: latestYear + ' Operating Expenses', value: abbrev(opexLatest),
-          sub: 'Excl. salaries & food'
+          sub: 'Excl. salaries & food',
+          tooltip: 'Total expenses minus food costs (line 24a) and salaries/benefits. Represents non-personnel, non-food operating costs.',
         },
         {
           label: 'Largest Category', value: largestExpCat[0],
-          sub: abbrev(largestExpCat[1][li])
+          sub: abbrev(largestExpCat[1][li]),
+          tooltip: 'The operating expense category (excluding salaries & food) with the highest dollar amount in the most recent fiscal year.',
         },
         {
           label: YEARS.length + '-Year Avg Operating', value: abbrev(
-            SUMMARY.otherExpenses.reduce((a, b) => a + b, 0) / YEARS.length)
+            SUMMARY.otherExpenses.reduce((a, b) => a + b, 0) / YEARS.length),
+          tooltip: 'Average annual operating expenses (excluding food and salaries) across all reported fiscal years.',
         },
       ]);
 
@@ -1128,8 +1226,8 @@
         data: {
           labels: FISCAL_YEARS.map(y => 'FY ' + y),
           datasets: [
-            { label: 'Food (Program)', data: FUNCTIONAL.foodProgram, backgroundColor: '#fbbf24', borderRadius: 3 },
-            { label: 'Program Services', data: FUNCTIONAL.program, backgroundColor: '#2563eb', borderRadius: 3 },
+            { label: 'Program Services (food)', data: FUNCTIONAL.foodProgram, backgroundColor: '#fbbf24', borderRadius: 3 },
+            { label: 'Program Services (non-food)', data: FUNCTIONAL.program, backgroundColor: '#2563eb', borderRadius: 3 },
             { label: 'Management & General', data: FUNCTIONAL.management, backgroundColor: '#f97316', borderRadius: 3 },
             { label: 'Fundraising', data: FUNCTIONAL.fundraising, backgroundColor: '#a855f7', borderRadius: 3 },
           ],
@@ -1321,6 +1419,7 @@
           label: 'Meals Served per Dollar',
           value: latestMealsPerDollar ? latestMealsPerDollar.toFixed(2) : 'N/A',
           sub: latestMpdYear,
+          tooltip: 'Meals purchasable per $1 of food spending, based on MOFC\u2019s food purchase cost per pound and Feeding America\u2019s 1.2 meals/lb standard.',
           extra: `<div class="donation-calc">
             <span><a href="https://mofc.org/get-involved/donate/" target="_blank" rel="noopener">Donating</a></span>
             <span class="donation-input-wrap">
@@ -1332,12 +1431,14 @@
         {
           label: 'Total Meals Served',
           value: fmtMeals(Math.round(avgMeals * EFFICIENCY.estimatedMeals.filter(v => v != null && v !== 0).length)),
-          sub: EFFICIENCY.estimatedMeals.filter(v => v != null && v !== 0).length + '-year total'
+          sub: EFFICIENCY.estimatedMeals.filter(v => v != null && v !== 0).length + '-year total',
+          tooltip: 'Cumulative estimated meals from all distributed food (donated + purchased). Calculated as total lbs distributed \u00d7 1.2 meals/lb (Feeding America standard).',
         },
         {
           label: 'Avg Waste Rate',
           value: avgWaste.toFixed(1) + '%',
-          sub: EFFICIENCY.wasteRate.filter(v => v != null && v !== 0).length + '-year average'
+          sub: EFFICIENCY.wasteRate.filter(v => v != null && v !== 0).length + '-year average',
+          tooltip: 'Average percentage of available donated food that was discarded. Waste rate = lbs discarded \u00f7 (lbs received + beginning inventory).',
         },
       ]);
 
@@ -1468,6 +1569,25 @@
           },
         },
       });
+
+      /* ════════════════════════════════════════════════════════════════
+         DYNAMIC SECTION NOTES
+         ════════════════════════════════════════════════════════════════ */
+      const foodVals = SUMMARY.food.filter(v => v > 0);
+      if (foodVals.length) {
+        const foodMin = Math.min(...foodVals);
+        const foodMax = Math.max(...foodVals);
+        const noteExp = document.getElementById('note-expenses');
+        if (noteExp) {
+          noteExp.textContent = 'Salaries & benefits excluded. Noncash food value (~' +
+            abbrev(foodMin) + '\u2013' + abbrev(foodMax) + ') available via toggle.';
+        }
+      }
+      const noteEff = document.getElementById('note-efficiency');
+      if (noteEff) {
+        noteEff.textContent = 'Efficiency metrics derived from annual audit reports and 990 filings. Audit data covers FY ' +
+          EFF_FISCAL[0] + '\u2013' + EFF_FISCAL[EFF_FISCAL.length - 1] + '.';
+      }
 
     }
 
