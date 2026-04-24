@@ -54,10 +54,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
 
-from mofc_financials.data_extraction.extract_990 import (
-    FINANCIAL_FIELDS,
-    extract_financials,
-)
+from mofc_financials.data_extraction.extract_990 import FINANCIAL_FIELDS, extract_financials
 from mofc_financials.data_extraction.extract_990_detail import (
     LineItemRow,
     extract_expense_detail,

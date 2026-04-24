@@ -7,10 +7,7 @@ as text-based extraction from annual audit PDFs and efficiency metric computatio
 """
 
 from mofc_financials.data_extraction.compute_efficiency import compute_metrics
-from mofc_financials.data_extraction.extract_990 import (
-    extract_financials,
-    extract_last_number,
-)
+from mofc_financials.data_extraction.extract_990 import extract_financials, extract_last_number
 from mofc_financials.data_extraction.extract_990_detail import (
     extract_expense_detail,
     extract_revenue_detail,

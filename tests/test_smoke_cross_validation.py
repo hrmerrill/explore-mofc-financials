@@ -20,11 +20,7 @@ from mofc_financials.data_extraction.extract_990_detail import (
     extract_expense_detail,
     extract_revenue_detail,
 )
-from mofc_financials.data_extraction.validate import (
-    ValidationIssue,
-    run_pipeline,
-    validate_year,
-)
+from mofc_financials.data_extraction.validate import ValidationIssue, run_pipeline, validate_year
 
 # ---------------------------------------------------------------------------
 # Helpers
