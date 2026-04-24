@@ -158,6 +158,8 @@
       border-radius: var(--radius);
       box-shadow: var(--shadow);
       padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
     }
 
     .kpi-label {
@@ -189,6 +191,22 @@
 
     .kpi-value.negative {
       color: var(--danger);
+    }
+
+    .kpi-trend {
+      font-weight: 600;
+    }
+
+    .kpi-trend.positive {
+      color: var(--success);
+    }
+
+    .kpi-trend.negative {
+      color: var(--danger);
+    }
+
+    .kpi-bottom {
+      margin-top: auto;
     }
 
     /* ── Chart Cards ── */
@@ -372,7 +390,8 @@
       justify-content: center;
       flex-wrap: wrap;
       gap: .3rem;
-      margin-top: .75rem;
+      margin-top: auto;
+      padding-top: .75rem;
       padding: .6rem .75rem;
       background: #eff6ff;
       border-radius: 6px;
@@ -1427,6 +1446,32 @@
       const avgMeals = avg(EFFICIENCY.estimatedMeals);
       const avgWaste = avg(EFFICIENCY.wasteRate);
 
+      // Avg year-over-year change in meals served
+      const validMeals = EFFICIENCY.estimatedMeals.filter(v => v != null && v !== 0);
+      const mealsYoyChanges = [];
+      for (let i = 1; i < validMeals.length; i++) {
+        mealsYoyChanges.push(validMeals[i] - validMeals[i - 1]);
+      }
+      const avgMealsChange = mealsYoyChanges.length
+        ? mealsYoyChanges.reduce((s, v) => s + v, 0) / mealsYoyChanges.length
+        : 0;
+      const mealsChangeSign = avgMealsChange >= 0 ? '+' : '';
+      const mealsChangeCls = avgMealsChange >= 0 ? 'positive' : 'negative';
+
+      // Waste rate: most recent year vs average of prior years
+      const validWaste = EFFICIENCY.wasteRate
+        .map((v, i) => ({ v, fy: EFF_FISCAL[i] }))
+        .filter(d => d.v != null && d.v !== 0);
+      const latestWaste = validWaste[validWaste.length - 1];
+      const priorWaste = validWaste.slice(0, -1);
+      const priorAvgWaste = priorWaste.length
+        ? priorWaste.reduce((s, d) => s + d.v, 0) / priorWaste.length
+        : 0;
+      const wasteDiff = latestWaste ? latestWaste.v - priorAvgWaste : 0;
+      const wasteDiffSign = wasteDiff > 0 ? '+' : '';
+      // Lower waste is better, so a decrease is positive
+      const wasteDiffCls = wasteDiff <= 0 ? 'positive' : 'negative';
+
       renderKpi('kpi-efficiency', [
         {
           label: 'Meals Served per Dollar',
@@ -1443,15 +1488,21 @@
         },
         {
           label: 'Total Meals Served',
-          value: fmtMeals(Math.round(avgMeals * EFFICIENCY.estimatedMeals.filter(v => v != null && v !== 0).length)),
-          sub: EFFICIENCY.estimatedMeals.filter(v => v != null && v !== 0).length + '-year total',
+          value: fmtMeals(Math.round(avgMeals * validMeals.length)),
+          sub: validMeals.length + '-year total',
           tooltip: 'Cumulative estimated meals from all distributed food (donated + purchased). Calculated as total lbs distributed \u00d7 1.2 meals/lb (Feeding America standard).',
+          extra: mealsYoyChanges.length
+            ? `<span class="kpi-sub kpi-bottom">Served <span class="kpi-trend ${mealsChangeCls}">${mealsChangeSign}${fmtMeals(Math.round(avgMealsChange))}</span> more meals each year on average</span>`
+            : '',
         },
         {
           label: 'Avg Waste Rate',
           value: avgWaste.toFixed(1) + '%',
-          sub: EFFICIENCY.wasteRate.filter(v => v != null && v !== 0).length + '-year average',
+          sub: validWaste.length + '-year average',
           tooltip: 'Average percentage of available donated food that was discarded. Waste rate = lbs discarded \u00f7 (lbs received + beginning inventory).',
+          extra: latestWaste && priorWaste.length
+            ? `<span class="kpi-sub kpi-bottom"><span class="kpi-trend ${wasteDiffCls}">${wasteDiffSign}${wasteDiff.toFixed(1)}%</span> waste in FY ${latestWaste.fy} vs prior years</span>`
+            : '',
         },
       ]);
 
