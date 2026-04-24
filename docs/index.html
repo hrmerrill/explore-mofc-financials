@@ -655,6 +655,15 @@
         </div>
         <div class="chart-card">
           <div class="chart-header">
+            <h3><span class="tooltip-wrap">Total Meals Served<span class="tooltip-icon">i</span><span
+                  class="tooltip-text">Estimated meals served each fiscal year. Calculated as total pounds of food
+                  distributed (donated + purchased) &times; 1.2 meals per pound (Feeding America
+                  standard).</span></span></h3>
+          </div>
+          <canvas id="chart-total-meals"></canvas>
+        </div>
+        <div class="chart-card">
+          <div class="chart-header">
             <h3><span class="tooltip-wrap">Waste Rate<span class="tooltip-icon">i</span><span
                   class="tooltip-text">Percentage of available donated food discarded each year. Calculated as lbs
                   discarded &divide; (lbs received + beginning inventory), from MOFC annual audit reports.</span></span>
@@ -662,7 +671,7 @@
           </div>
           <canvas id="chart-waste-rate"></canvas>
         </div>
-        <div class="chart-card full-width">
+        <div class="chart-card">
           <div class="chart-header">
             <h3><span class="tooltip-wrap">Food Volume by Source<span class="tooltip-icon">i</span><span
                   class="tooltip-text">Pounds of food distributed by source: TEFAP (federal), CSFP (federal), Ohio Food
@@ -696,9 +705,13 @@
         </p>
         <h3 style="font-size: 1rem; margin-bottom: .5rem;">What's Missing?</h3>
         <p style="margin-bottom: 1rem; color: var(--text-muted);">
+          <strong>Opportunities.</strong> Turning insights from this dashboard into actions that increase impact
+          requires
+          more information than I have available; e.g., which expenses are relatively fixed versus which can be
+          decreased
+          with new tools, services, vendors, etc.? <br>
           <strong>Granularity.</strong> For example, MOFC serves many communities, and visualizing community-specific
-          impact may
-          reveal opportunities that are not visible at the overall level.
+          impact may reveal opportunities that are not visible at the overall level.
         </p>
         <h3 style="font-size: 1rem; margin-bottom: .5rem;">Who</h3>
         <p style="margin-bottom: 1rem; color: var(--text-muted);">
@@ -1503,6 +1516,48 @@
       }
       donationInput.addEventListener('input', updateDonationMeals);
       updateDonationMeals();
+
+      /* Total Meals Served chart — bar chart of estimated meals per year */
+      const tmLabels = [];
+      const tmData = [];
+      EFF_FISCAL.forEach((fy, i) => {
+        const v = EFFICIENCY.estimatedMeals[i];
+        if (v != null && v > 0) {
+          tmLabels.push('FY ' + fy);
+          tmData.push(v);
+        }
+      });
+
+      charts['chart-total-meals'] = new Chart(document.getElementById('chart-total-meals'), {
+        type: 'bar',
+        data: {
+          labels: tmLabels,
+          datasets: [{
+            label: 'Total Meals Served',
+            data: tmData,
+            backgroundColor: '#059669',
+            borderRadius: 3,
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          aspectRatio: baseAspect(),
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: ctx => 'Meals: ' + fmtMeals(ctx.parsed.y) } },
+          },
+          scales: {
+            x: { grid: { display: false } },
+            y: {
+              title: { display: true, text: 'Estimated Meals', font: { size: 11 } },
+              ticks: { callback: v => fmtMeals(v) },
+              grid: { color: '#f1f5f9' },
+            },
+          },
+        },
+      });
 
       /* Food Volume chart */
       const EFF_COLORS = ['#1e40af', '#0891b2', '#059669', '#65a30d', '#ca8a04'];
